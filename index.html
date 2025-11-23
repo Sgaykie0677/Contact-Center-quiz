@@ -4,90 +4,57 @@
   <meta charset="UTF-8" />
   <title>Contact Center Playbook Quiz</title>
   <style>
-    :root {
-      --primary: #0a66c2;
-      --primary-dark: #084f98;
-      --bg: #f6f7fb;
-      --card: #ffffff;
-      --text: #222;
-      --muted: #666;
-      --correct: #1b8a3e;
-      --incorrect: #c21f1f;
-    }
-    * { box-sizing: border-box; }
-    body { font-family: Inter, Arial, sans-serif; margin: 32px; background: var(--bg); color: var(--text); }
+    body { font-family: Arial, sans-serif; margin: 32px; background: #f6f7fb; color: #222; }
     .container { max-width: 900px; margin: 0 auto; }
-    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-    h1 { font-size: 22px; margin: 0; }
-    .card { background: var(--card); border-radius: 12px; box-shadow: 0 6px 22px rgba(0,0,0,0.06); padding: 20px; }
-    .controls { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; margin-bottom: 20px; }
-    select, button { padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; background: #fff; font-size: 14px; }
-    button.primary { background: var(--primary); color: #fff; border: none; }
-    button.primary:hover { background: var(--primary-dark); }
-    button.secondary { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .meta { font-size: 12px; color: var(--muted); }
+    h1 { font-size: 22px; margin-bottom: 16px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 6px 22px rgba(0,0,0,0.06); padding: 20px; margin-bottom: 16px; }
+    select, button { padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; }
+    button.primary { background: #0a66c2; color: #fff; border: none; }
+    button.primary:hover { background: #084f98; }
     .question-block { border-top: 1px solid #eee; padding-top: 16px; margin-top: 16px; }
     .question-title { font-weight: 600; margin-bottom: 10px; }
     .options label { display: block; margin: 6px 0; cursor: pointer; }
     .feedback { margin-top: 8px; font-size: 13px; font-style: italic; }
-    .feedback.correct { color: var(--correct); }
-    .feedback.incorrect { color: var(--incorrect); }
+    .feedback.correct { color: green; }
+    .feedback.incorrect { color: red; }
     .result { margin-top: 16px; font-weight: 600; }
-    .footer-actions { display: flex; gap: 10px; margin-top: 16px; }
-    .pill { display: inline-block; background: #f0f4ff; color: #334; border: 1px solid #dbe4ff; padding: 6px 10px; border-radius: 999px; font-size: 12px; margin-right: 8px; }
-    .hint { color: var(--muted); font-size: 12px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>Contact Center Playbook Quiz</h1>
-      <div class="meta" id="lastSession"></div>
-    </div>
-
+    <h1>Contact Center Playbook Quiz</h1>
     <div class="card">
-      <div class="controls">
-        <select id="sectionSelect"></select>
-        <button class="secondary" id="shuffleBtn">Shuffle</button>
-        <button class="primary" id="loadBtn">Load section</button>
-      </div>
-      <div class="hint">Select a section and click “Load section”. Questions are randomized each run. Submit to see instant feedback.</div>
+      <label for="sectionSelect">Choose a section:</label>
+      <select id="sectionSelect"></select>
+      <button class="primary" onclick="loadSection()">Load Section</button>
     </div>
-
-    <div class="card" style="margin-top: 16px;">
+    <div class="card">
       <div id="quiz"></div>
-      <div class="footer-actions">
-        <button class="primary" id="submitBtn">Submit answers</button>
-        <button class="secondary" id="reviewIncorrectBtn" disabled>Review incorrect</button>
-        <button class="secondary" id="resetBtn">Reset</button>
-      </div>
+      <button class="primary" onclick="submitQuiz()">Submit Answers</button>
       <div id="result" class="result"></div>
     </div>
   </div>
 
   <script>
-    // Utility helpers
-    const byId = (id) => document.getElementById(id);
-    const saveSession = (section, score, total) => {
-      localStorage.setItem("playbook_last_section", section);
-      localStorage.setItem("playbook_last_score", JSON.stringify({ score, total, ts: Date.now() }));
-      renderLastSession();
+    // Definitions dictionary
+    const DEFINITIONS = {
+      "R15": "Reject code for missing prior authorization.",
+      "R05": "Reject code for duplicate submission.",
+      "R10": "Reject code for incomplete information.",
+      "R20": "Reject code for eligibility not verified.",
+      "R25": "Reject code for documentation missing.",
+      "R30": "Reject code for wrong provider listed.",
+      "Eligibility": "Verification that the caller is an active member with valid coverage.",
+      "MHK": "System used to track Clinical Review workflows and documentation.",
+      "Escalation": "Routing a call or case to a higher authority (supervisor, pharmacist) per protocol.",
+      "Audit Readiness": "Ensuring documentation and workflows are complete, chronological, and compliant for review.",
+      "Compliance": "Following rules, policies, and regulations to protect members and the organization.",
+      "Documentation": "Recording actions, outcomes, and rationale in a structured, audit-ready format.",
+      "Scripts": "Standardized phrasing used to guide calls and ensure consistency.",
+      "Non-member": "Caller who is not the member; requires limited disclosure and documentation."
     };
-    const renderLastSession = () => {
-      const section = localStorage.getItem("playbook_last_section");
-      const raw = localStorage.getItem("playbook_last_score");
-      const el = byId("lastSession");
-      if (!section || !raw) { el.textContent = ""; return; }
-      const { score, total, ts } = JSON.parse(raw);
-      const date = new Date(ts).toLocaleString();
-      el.textContent = `Last: ${section} — ${score}/${total} on ${date}`;
-    };
-    const shuffle = (arr) => arr.map(v => ({ v, r: Math.random() }))
-                               .sort((a,b) => a.r - b.r)
-                               .map(({ v }) => v);
 
-    // Sections and question banks
+    // Sections
     const SECTIONS = [
       { id: "Member Verification & Eligibility", tag: "member" },
       { id: "Clinical Review Workflow", tag: "clinical" },
@@ -100,87 +67,21 @@
       { id: "Non-member & Third-party Calls", tag: "nonmember" }
     ];
 
+    // Questions (sample set per section, expand as needed)
     const QUESTIONS = [
-      // Member Verification & Eligibility
-      { section: "member", q: "What is the first action when a call begins?", options: ["Ask reason for call", "Verify caller identity and eligibility", "Check reject codes", "Open escalation ladder"], a: 1, expl: "Identity + eligibility verification comes first to meet compliance and avoid misprocessing." },
-      { section: "member", q: "Which data point is required for member verification?", options: ["Caller mood", "Date of birth and plan ID per policy", "Supervisor availability", "Pharmacy location"], a: 1, expl: "Use required identifiers (e.g., DOB + plan ID) per policy to confirm identity." },
-      { section: "member", q: "If the caller is not the member, what is appropriate?", options: ["Proceed normally", "Provide limited info per policy and document", "Escalate immediately", "End call without notes"], a: 1, expl: "Limit disclosures per policy, capture who called, and document the interaction." },
-      { section: "member", q: "Before discussing clinical details, you should:", options: ["Confirm HIPAA release or representative status", "Skip verification if urgent", "Ask for reject code", "Transfer to clinical pharmacist"], a: 0, expl: "Confirm authorization or representative status before sharing protected information." },
-      { section: "member", q: "Eligibility discrepancies should be handled by:", options: ["Documenting and re-verifying in the eligibility portal", "Ignoring and proceeding", "Assigning random reject code", "Transferring without notes"], a: 0, expl: "Re-verify with the portal, clarify benefits, and document the resolution steps." },
-      { section: "member", q: "If verification fails after multiple attempts:", options: ["End call and note verification failure", "Proceed with limited info", "Assign R15", "Transfer to supervisor immediately"], a: 0, expl: "Do not disclose; end call politely and document failed verification per policy." },
-
-      // Clinical Review Workflow
-      { section: "clinical", q: "What starts a clinical review workflow?", options: ["Member satisfaction survey", "A trigger such as PA need or safety concern", "System downtime", "Supervisor request"], a: 1, expl: "Clinical review initiates when criteria such as PA requirement or clinical flags are met." },
-      { section: "clinical", q: "Which system is used to track clinical workflows?", options: ["Email", "MHK", "Spreadsheets", "Chat logs"], a: 1, expl: "MHK is the official tool to track review status, notes, and actions." },
-      { section: "clinical", q: "Before applying any code you must:", options: ["Confirm eligibility and intake details", "Ask for supervisor approval", "Close the case", "Send a survey"], a: 0, expl: "Accurate intake and eligibility verification precede coding to ensure correct routing." },
-      { section: "clinical", q: "Final step before closing a review:", options: ["Confirm resolution with caller and summarize actions", "Assign an additional code", "Escalate by default", "Delete the notes"], a: 0, expl: "Confirm resolution and provide a clear summary for audit readiness." },
-      { section: "clinical", q: "If clinical criteria are unclear:", options: ["Guess and proceed", "Check protocols and escalate for clinical validation", "Apply R99", "Document nothing"], a: 1, expl: "Use protocols; if ambiguous, escalate to clinical validation rather than guessing." },
-      { section: "clinical", q: "Best practice for time-sensitive clinical requests:", options: ["Hold until next shift", "Flag urgency in MHK and follow escalation ladder", "Transfer to general queue", "Omit documentation"], a: 1, expl: "Mark urgency, follow ladder, and document actions consistently." },
-
-      // Reject Codes
-      { section: "rejects", q: "Prior authorization missing is typically captured as:", options: ["R01", "R15", "R05", "R30"], a: 1, expl: "R15 indicates missing prior authorization." },
-      { section: "rejects", q: "Duplicate submission is:", options: ["R05", "R15", "R22", "R99"], a: 0, expl: "R05 is commonly used for duplicate submissions." },
-      { section: "rejects", q: "Incomplete information maps to:", options: ["R10", "R15", "R05", "R99"], a: 0, expl: "R10 captures missing or incomplete required information." },
-      { section: "rejects", q: "Documentation missing is:", options: ["R25", "R20", "R05", "R99"], a: 0, expl: "Use R25 to indicate that documentation was not provided." },
-      { section: "rejects", q: "Eligibility not verified relates to:", options: ["R20", "R15", "R05", "R30"], a: 0, expl: "R20 is used when eligibility verification is lacking." },
-      { section: "rejects", q: "Wrong provider listed is:", options: ["R30", "R10", "R05", "R15"], a: 0, expl: "R30 indicates the provider information is incorrect." },
-
-      // Documentation Standards
-      { section: "docs", q: "Core note elements should include:", options: ["Actions, outcomes, and rationale", "Caller mood only", "Supervisor initials only", "No details"], a: 0, expl: "Document actions taken, outcomes, and the reason for decisions." },
-      { section: "docs", q: "When adding a reject code, you should also:", options: ["Skip notes", "Record the reason and next steps", "Ask for survey", "Close case immediately"], a: 1, expl: "Pair codes with context and planned follow-up for clarity." },
-      { section: "docs", q: "Audit-ready notes are:", options: ["Chronological, specific, and policy-aligned", "Vague and brief", "Copied from prior cases", "Stored outside the system"], a: 0, expl: "Write chronological, specific notes aligned to policy and workflow." },
-      { section: "docs", q: "If you edit a note, you should:", options: ["Overwrite without timestamp", "Add an addendum with date/time", "Delete the original", "Email the changes only"], a: 1, expl: "Use addendums with timestamps to preserve an audit trail." },
-      { section: "docs", q: "A complete call log includes:", options: ["Caller identity, issue, actions, outcome", "Only identity", "Only outcome", "Only supervisor name"], a: 0, expl: "Capture who called, the issue, steps taken, and the resolution." },
-      { section: "docs", q: "Free-text notes should avoid:", options: ["Subjective language and PHI beyond policy scope", "Timestamps", "Actions", "Outcomes"], a: 0, expl: "Stick to objective, necessary details within policy boundaries." },
-
-      // Escalation Protocols
-      { section: "escalation", q: "Escalate to a supervisor when:", options: ["Caller disputes a code or requests a supervisor", "Any routine call occurs", "You prefer not to document", "System is fast"], a: 0, expl: "Disputes and explicit requests require supervisor escalation." },
-      { section: "escalation", q: "Escalate to clinical pharmacist when:", options: ["Compliance requires clinical review", "Caller is angry", "A survey is needed", "Any code is applied"], a: 0, expl: "Follow clinical escalation when rules mandate pharmacist review." },
-      { section: "escalation", q: "Urgent escalations should be:", options: ["Deferred", "Marked urgent and routed per ladder", "Left untagged", "Sent to general queue"], a: 1, expl: "Use urgency flags and route per the escalation ladder." },
-      { section: "escalation", q: "Documentation during escalation must:", options: ["Capture reason, destination, and expected follow-up", "Be skipped for speed", "Use only codes", "Be stored in email"], a: 0, expl: "Document the why, where, and what happens next." },
-      { section: "escalation", q: "If the ladder is unclear:", options: ["Guess the route", "Consult the protocol and confirm with supervisor", "Send to random queue", "Close case"], a: 1, expl: "Check protocol and confirm to avoid misrouting." },
-      { section: "escalation", q: "Post-escalation step:", options: ["Confirm with caller and summarize next actions", "End call without summary", "Remove notes", "Assign extra code"], a: 0, expl: "Close the loop with the caller and summarize the plan." },
-
-      // Compliance & Audit Readiness
-      { section: "compliance", q: "PHI sharing requires:", options: ["Verified identity/authorization and policy alignment", "Caller insistence only", "No verification", "Supervisor initials"], a: 0, expl: "Share PHI only after verification and per policy limits." },
-      { section: "compliance", q: "Minimum necessary principle means:", options: ["Share only what’s needed to resolve", "Share everything for transparency", "Avoid documentation", "Skip verification"], a: 0, expl: "Disclose the least information necessary to accomplish the task." },
-      { section: "compliance", q: "Audit readiness improves when notes are:", options: ["Complete, chronological, and justified", "Sparse", "Unstructured", "Stored off-system"], a: 0, expl: "Write complete chronological notes with rationale." },
-      { section: "compliance", q: "If a potential privacy breach occurs:", options: ["Ignore", "Follow incident protocol and document", "Delete notes", "Ask caller to keep quiet"], a: 1, expl: "Activate incident processes and capture details accurately." },
-      { section: "compliance", q: "Call recordings should be used:", options: ["Per policy for verification and audits", "Shared freely", "Never used", "Stored personally"], a: 0, expl: "Access recordings only within policy for verification and audit support." },
-      { section: "compliance", q: "Policy updates require:", options: ["Review and acknowledgment; apply changes in practice", "No action", "Email only", "Supervisor memo"], a: 0, expl: "Track updates, acknowledge, and adjust workflows accordingly." },
-
-      // System Navigation (MHK & Portals)
-      { section: "systems", q: "Primary system for clinical tracking:", options: ["MHK", "Chat", "Email", "Spreadsheet"], a: 0, expl: "MHK is the system of record for clinical workflows." },
-      { section: "systems", q: "Eligibility is verified in:", options: ["Eligibility portal", "MHK notes", "Supervisor DMs", "Local files"], a: 0, expl: "Use the eligibility portal for member verification." },
-      { section: "systems", q: "If a field won’t save:", options: ["Refresh without notes", "Check required fields and error prompts", "Close case", "Escalate immediately"], a: 1, expl: "Validate required fields and follow prompts to resolve." },
-      { section: "systems", q: "Best practice for system downtime:", options: ["Stop working", "Follow downtime procedure and capture notes", "Ignore and proceed", "Use personal device"], a: 1, expl: "Use downtime workflows and back-enter notes once restored." },
-      { section: "systems", q: "Linking notes across systems:", options: ["Reference IDs and timestamps consistently", "Copy-paste everything", "Skip linkage", "Use nicknames"], a: 0, expl: "Use IDs/timestamps to connect records across systems." },
-      { section: "systems", q: "When navigating multiple tabs:", options: ["Use structured workflow and checklist", "Randomly click around", "Skip documentation", "Ask caller to wait indefinitely"], a: 0, expl: "Follow a structured sequence and checklist to stay accurate." },
-
-      // Scripts & Call Handling
-      { section: "scripts", q: "After verification, opening script should:", options: ["State purpose and set expectations", "Jump to codes", "Ask for survey", "Request supervisor"], a: 0, expl: "Use clear, concise scripting to set expectations and guide the call." },
-      { section: "scripts", q: "De-escalation phrasing includes:", options: ["Validating concerns and offering next steps", "Arguing", "Silence", "Disconnecting"], a: 0, expl: "Validate, summarize, and present options to de-escalate." },
-      { section: "scripts", q: "Before ending the call:", options: ["Confirm resolution and summarize actions", "End abruptly", "Ask unrelated questions", "Skip notes"], a: 0, expl: "Always close with confirmation and a brief summary." },
-      { section: "scripts", q: "Handling disputes about codes:", options: ["Explain policy, document, and escalate as required", "Ignore", "Remove code silently", "Blame systems"], a: 0, expl: "Be transparent, document, and use the correct escalation." },
-      { section: "scripts", q: "Active listening in calls looks like:", options: ["Paraphrasing and clarifying key points", "Interrupting often", "Reading policy verbatim only", "Multitasking loudly"], a: 0, expl: "Reflect, clarify, and keep the caller oriented to the plan." },
-      { section: "scripts", q: "If caller becomes distressed:", options: ["Acknowledge, slow the pace, and offer structured options", "Hurry through", "Transfer immediately", "Raise your voice"], a: 0, expl: "Use calm, structured language and options to stabilize the call." },
-
-      // Non-member & Third-party Calls
-      { section: "nonmember", q: "When a third party calls about a member:", options: ["Confirm authorization or provide minimum necessary info", "Share freely", "Refuse to document", "Guess identity"], a: 0, expl: "Confirm authorized status; otherwise limit sharing to minimum necessary and document." },
-      { section: "nonmember", q: "If a provider calls with incomplete info:", options: ["Provide general guidance and request required details", "Share PHI", "End call without notes", "Assign random code"], a: 0, expl: "Give general, non-PHI guidance and request the missing items; document." },
-      { section: "nonmember", q: "Non-member inquiries should be:", options: ["Logged with caller type and limited response", "Ignored", "Fully detailed with PHI", "Transcribed loosely"], a: 0, expl: "Record caller type, limit disclosures, and capture the exchange." },
-      { section: "nonmember", q: "If authorization arrives mid-call:", options: ["Re-verify and proceed per member protocols", "Ignore it", "End call", "Assign extra codes"], a: 0, expl: "Once authorized, re-verify and continue under member protocols." },
-      { section: "nonmember", q: "Third-party disputes:", options: ["Document, explain policy limits, escalate if needed", "Share everything", "Skip notes", "Delay indefinitely"], a: 0, expl: "Note the dispute, explain limits, and escalate per protocol if necessary." },
-      { section: "nonmember", q: "When identity cannot be confirmed:", options: ["Decline PHI, provide general process info, and document", "Share PHI anyway", "Continue as member", "Delete notes"], a: 0, expl: "Protect PHI, offer general guidance, and record the outcome." }
+      { section:"member", q:"What is the first step when handling a Clinical Review call?", options:["Verify member identity","Check escalation protocol","Document reject code","Transfer to supervisor"], a:0, expl:"Always verify member identity first to ensure compliance.", term:"Eligibility" },
+      { section:"clinical", q:"Which system is used to track Clinical Review workflows?", options:["Email","MHK","Spreadsheets","Chat logs"], a:1, expl:"MHK is the official tool to track review status.", term:"MHK" },
+      { section:"rejects", q:"Which reject code applies when prior authorization is missing?", options:["R01","R15","R22","R99"], a:1, expl:"R15 is used when prior authorization is missing.", term:"R15" },
+      { section:"docs", q:"What must be documented after applying a reject code?", options:["Supervisor initials","Reason and action taken","Caller’s tone","Nothing"], a:1, expl:"Reason and action taken must be documented.", term:"Documentation" },
+      { section:"escalation", q:"When should you escalate to a supervisor?", options:["Caller disputes a code","Any routine call","System is fast","Skip documentation"], a:0, expl:"Disputes and explicit requests require supervisor escalation.", term:"Escalation" },
+      { section:"compliance", q:"Minimum necessary principle means:", options:["Share only what’s needed","Share everything","Avoid documentation","Skip verification"], a:0, expl:"Disclose the least information necessary to accomplish the task.", term:"Compliance" },
+      { section:"systems", q:"Primary system for clinical tracking:", options:["MHK","Chat","Email","Spreadsheet"], a:0, expl:"MHK is the system of record for clinical workflows.", term:"MHK" },
+      { section:"scripts", q:"Before ending the call you should:", options:["Confirm resolution","End abruptly","Skip notes","Ask unrelated questions"], a:0, expl:"Always close with confirmation and a brief summary.", term:"Scripts" },
+      { section:"nonmember", q:"When a third party calls about a member:", options:["Confirm authorization or provide minimum necessary info","Share freely","Refuse to document","Guess identity"], a:0, expl:"Confirm authorized status; otherwise limit sharing and document.", term:"Non-member" }
     ];
 
-    // State
-    let currentSectionTag = null;
-    let currentQuestions = [];
-    let submitted = false;
-
     // Build section dropdown
-    const sectionSelect = byId("sectionSelect");
+    const sectionSelect = document.getElementById("sectionSelect");
     SECTIONS.forEach(s => {
       const opt = document.createElement("option");
       opt.value = s.tag;
@@ -188,124 +89,45 @@
       sectionSelect.appendChild(opt);
     });
 
-    // Prefill from last session if available
-    const lastTag = localStorage.getItem("playbook_last_section_tag");
-    if (lastTag && SECTIONS.some(s => s.tag === lastTag)) {
-      sectionSelect.value = lastTag;
-    }
-
-    // Render last session
-    renderLastSession();
+    let currentQuestions = [];
 
     function loadSection() {
-      submitted = false;
-      currentSectionTag = sectionSelect.value;
-      localStorage.setItem("playbook_last_section_tag", currentSectionTag);
-
-      const pool = QUESTIONS.filter(q => q.section === currentSectionTag);
-      currentQuestions = shuffle(pool).slice(0, Math.min(10, pool.length)); // up to 10 per run
-
-      const quizDiv = byId("quiz");
+      const tag = sectionSelect.value;
+      currentQuestions = QUESTIONS.filter(q => q.section === tag);
+      const quizDiv = document.getElementById("quiz");
       quizDiv.innerHTML = "";
-      currentQuestions.forEach((q, i) => {
+      currentQuestions.forEach((q,i) => {
         const block = document.createElement("div");
         block.className = "question-block";
         block.innerHTML = `
-          <div class="pill">${SECTIONS.find(s => s.tag === currentSectionTag).id}</div>
-          <div class="question-title">${i + 1}. ${q.q}</div>
+          <div class="question-title">${i+1}. ${q.q}</div>
           <div class="options">
-            ${q.options.map((opt, j) =>
-              `<label><input type="radio" name="q${i}" value="${j}"> ${opt}</label>`
-            ).join("")}
+            ${q.options.map((opt,j)=>`<label><input type="radio" name="q${i}" value="${j}"> ${opt}</label>`).join("")}
           </div>
           <div class="feedback" id="fb${i}" style="display:none;"></div>
         `;
         quizDiv.appendChild(block);
       });
-
-      byId("result").textContent = "";
-      byId("reviewIncorrectBtn").disabled = true;
+      document.getElementById("result").textContent = "";
     }
 
     function submitQuiz() {
-      if (!currentQuestions.length) return;
       let score = 0;
-      currentQuestions.forEach((q, i) => {
+      currentQuestions.forEach((q,i) => {
         const selected = document.querySelector(`input[name="q${i}"]:checked`);
-        const fb = byId(`fb${i}`);
+        const fb = document.getElementById(`fb${i}`);
         fb.style.display = "block";
+        const defText = q.term && DEFINITIONS[q.term] ? `Definition: ${DEFINITIONS[q.term]}` : "";
         if (selected && parseInt(selected.value) === q.a) {
           score++;
           fb.className = "feedback correct";
-          fb.textContent = `Correct — ${q.expl}`;
+          fb.innerHTML = `Correct — ${q.expl}<br>${defText}`;
         } else if (selected) {
           fb.className = "feedback incorrect";
-          fb.textContent = `Incorrect — ${q.expl}`;
+          fb.innerHTML = `Incorrect — ${q.expl}<br>${defText}`;
         } else {
           fb.className = "feedback incorrect";
-          fb.textContent = `No answer selected — ${q.expl}`;
+          fb.innerHTML = `No answer selected — ${q.expl}<br>${defText}`;
         }
       });
-      submitted = true;
-      byId("result").textContent = `Score: ${score} / ${currentQuestions.length}`;
-      byId("reviewIncorrectBtn").disabled = false;
-      // Save session summary
-      saveSession(SECTIONS.find(s => s.tag === currentSectionTag).id, score, currentQuestions.length);
-    }
-
-    function reviewIncorrect() {
-      if (!submitted) return;
-      const incorrectIndices = currentQuestions.map((q, i) => {
-        const selected = document.querySelector(`input[name="q${i}"]:checked`);
-        return (selected && parseInt(selected.value) === q.a) ? null : i;
-      }).filter(i => i !== null);
-
-      const quizDiv = byId("quiz");
-      quizDiv.innerHTML = "";
-      if (!incorrectIndices.length) {
-        quizDiv.innerHTML = `<div class="question-block"><div class="question-title">All answers were correct — strong work. You can reload or try another section.</div></div>`;
-        return;
-      }
-
-      incorrectIndices.forEach((idx, n) => {
-        const q = currentQuestions[idx];
-        const block = document.createElement("div");
-        block.className = "question-block";
-        block.innerHTML = `
-          <div class="pill">Review: ${SECTIONS.find(s => s.tag === currentSectionTag).id}</div>
-          <div class="question-title">${n + 1}. ${q.q}</div>
-          <div class="options">
-            ${q.options.map((opt, j) =>
-              `<label><input type="radio" name="rq${n}" value="${j}"> ${opt}</label>`
-            ).join("")}
-          </div>
-          <div class="feedback" id="rfb${n}" style="display:none;"></div>
-        `;
-        quizDiv.appendChild(block);
-      });
-      byId("result").textContent = "Focus round: re-answer the missed items.";
-    }
-
-    function resetQuiz() {
-      byId("quiz").innerHTML = "";
-      byId("result").textContent = "";
-      byId("reviewIncorrectBtn").disabled = true;
-      submitted = false;
-      currentQuestions = [];
-    }
-
-    // Wire up controls
-    byId("loadBtn").addEventListener("click", loadSection);
-    byId("shuffleBtn").addEventListener("click", () => {
-      if (!currentSectionTag) return;
-      loadSection();
-    });
-    byId("submitBtn").addEventListener("click", submitQuiz);
-    byId("reviewIncorrectBtn").addEventListener("click", reviewIncorrect);
-    byId("resetBtn").addEventListener("click", resetQuiz);
-
-    // Auto-load initial section for momentum
-    loadSection();
-  </script>
-</body>
-</html>
+      document.getElementById("result").textContent = `
