@@ -5,7 +5,7 @@
   <title>Contact Center Playbook Quiz</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 32px; background: #f6f7fb; color: #222; }
-    .container { max-width: 700px; margin: 0 auto; }
+    .container { max-width: 900px; margin: 0 auto; }
     h1 { font-size: 22px; margin-bottom: 16px; }
     .card { background: #fff; border-radius: 12px; box-shadow: 0 6px 22px rgba(0,0,0,0.06); padding: 20px; margin-bottom: 16px; }
     select, button { padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; }
@@ -36,9 +36,14 @@
   </div>
 
   <script>
+    // Definitions dictionary
     const DEFINITIONS = {
       "R15": "Reject code for missing prior authorization.",
       "R05": "Reject code for duplicate submission.",
+      "R10": "Reject code for incomplete information.",
+      "R20": "Reject code for eligibility not verified.",
+      "R25": "Reject code for documentation missing.",
+      "R30": "Reject code for wrong provider listed.",
       "Eligibility": "Verification that the caller is an active member with valid coverage.",
       "MHK": "System used to track Clinical Review workflows and documentation.",
       "Escalation": "Routing a call or case to a higher authority (supervisor, pharmacist) per protocol.",
@@ -48,6 +53,7 @@
       "Non-member": "Caller who is not the member; requires limited disclosure and documentation."
     };
 
+    // Sections
     const SECTIONS = [
       { id: "Member Verification & Eligibility", tag: "member" },
       { id: "Clinical Review Workflow", tag: "clinical" },
@@ -60,57 +66,25 @@
       { id: "Non-member & Third-party Calls", tag: "nonmember" }
     ];
 
+    // Questions: 10 per section
     const QUESTIONS = [
-      { section:"member", q:"What is the first step when handling a Clinical Review call?", options:["Verify member identity","Check escalation protocol","Document reject code","Transfer to supervisor"], a:0, expl:"Always verify member identity first to ensure compliance.", term:"Eligibility", playbookLang:"Per playbook: 'Begin every call by verifying the member’s identity using two approved identifiers.'"},
-      { section:"clinical", q:"Which system is used to track Clinical Review workflows?", options:["Email","MHK","Spreadsheets","Chat logs"], a:1, expl:"MHK is the official tool to track review status.", term:"MHK", playbookLang:"Per playbook: 'All Clinical Review workflows must be documented and tracked in the MHK system.'"},
-      { section:"rejects", q:"Which reject code applies when prior authorization is missing?", options:["R01","R15","R22","R99"], a:1, expl:"R15 is used when prior authorization is missing.", term:"R15", playbookLang:"Per playbook: 'Use reject code R15 when prior authorization is not on file.'"},
-      { section:"docs", q:"What must be documented after applying a reject code?", options:["Supervisor initials","Reason and action taken","Caller’s tone","Nothing"], a:1, expl:"Reason and action taken must be documented.", term:"Documentation", playbookLang:"Per playbook: 'Document the reason for the reject code and the action taken to resolve.'"},
-      { section:"escalation", q:"When should you escalate to a supervisor?", options:["Caller disputes a code","Any routine call","System is fast","Skip documentation"], a:0, expl:"Disputes and explicit requests require supervisor escalation.", term:"Escalation", playbookLang:"Per playbook: 'Escalate to a supervisor when a caller disputes a code or requests escalation.'"},
-      { section:"compliance", q:"Minimum necessary principle means:", options:["Share only what’s needed","Share everything","Avoid documentation","Skip verification"], a:0, expl:"Disclose the least information necessary to accomplish the task.", term:"Compliance", playbookLang:"Per playbook: 'Always apply the minimum necessary standard when sharing information.'"},
-      { section:"systems", q:"Primary system for clinical tracking:", options:["MHK","Chat","Email","Spreadsheet"], a:0, expl:"MHK is the system of record for clinical workflows.", term:"MHK", playbookLang:"Per playbook: 'All clinical tracking must be performed in MHK.'"},
-      { section:"scripts", q:"Before ending the call you should:", options:["Confirm resolution","End abruptly","Skip notes","Ask unrelated questions"], a:0, expl:"Always close with confirmation and a brief summary.", term:"Scripts", playbookLang:"Per playbook: 'Close every call by confirming resolution and summarizing next steps.'"},
-      { section:"nonmember", q:"When a third party calls about a member:", options:["Confirm authorization or provide minimum necessary info","Share freely","Refuse to document","Guess identity"], a:0, expl:"Confirm authorized status; otherwise limit sharing and document.", term:"Non-member", playbookLang:"Per playbook: 'For non-member calls, confirm authorization or provide only minimum necessary information.'"}
-    ];
-
-    const sectionSelect = document.getElementById("sectionSelect");
-    SECTIONS.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.tag;
-      opt.textContent = s.id;
-      sectionSelect.appendChild(opt);
-    });
-
-    let currentQuestions = [];
-    let currentIndex = 0;
-    let score = 0;
-
-    function startQuiz() {
-      const tag = sectionSelect.value;
-      currentQuestions = QUESTIONS.filter(q => q.section === tag);
-      currentIndex = 0;
-      score = 0;
-      document.getElementById("result").textContent = "";
-      showQuestion();
-    }
-
-    function showQuestion() {
-      const quizDiv = document.getElementById("quiz");
-      quizDiv.innerHTML = "";
-      if (currentIndex < currentQuestions.length) {
-        const q = currentQuestions[currentIndex];
-        const block = document.createElement("div");
-        block.className = "question-block";
-        block.innerHTML = `
-          <div class="question-title">${currentIndex+1}. ${q.q}</div>
-          <div class="options">
-            ${q.options.map((opt,j)=>`<label><input type="radio" name="q${currentIndex}" value="${j}"> ${opt}</label>`).join("")}
-          </div>
-          <div class="feedback" id="fb${currentIndex}" style="display:none;"></div>
-        `;
-        quizDiv.appendChild(block);
-        document.getElementById("submitBtn").style.display = "inline-block";
-        document.getElementById("nextBtn").style.display = "none";
-      } else {
-        quizDiv.innerHTML = "<div class='question-title'>Quiz complete!</div>";
-        document.getElementById("submitBtn").style.display = "none";
-        document.getElementById("nextBtn").
+      // Member Verification (10)
+      {section:"member", q:"What is the first step when handling a Clinical Review call?", options:["Verify member identity","Check escalation protocol","Document reject code","Transfer to supervisor"], a:0, expl:"Always verify member identity first.", term:"Eligibility", playbookLang:"Per playbook: 'Begin every call by verifying the member’s identity using two approved identifiers.'"},
+      {section:"member", q:"Which identifiers are required for verification?", options:["DOB + Plan ID","Phone number","Supervisor initials","Reject code"], a:0, expl:"DOB and Plan ID are required.", term:"Eligibility", playbookLang:"Per playbook: 'Use DOB and Plan ID to confirm identity.'"},
+      {section:"member", q:"If caller is not the member:", options:["Provide limited info and document","Share full PHI","Ignore","End call immediately"], a:0, expl:"Provide limited info and document.", term:"Non-member", playbookLang:"Per playbook: 'Provide minimum necessary info and document.'"},
+      {section:"member", q:"Eligibility discrepancies should be handled by:", options:["Re-verifying in portal","Ignoring","Assigning R15","Escalating immediately"], a:0, expl:"Re-verify eligibility.", term:"Eligibility", playbookLang:"Per playbook: 'Re-verify eligibility in the portal and document.'"},
+      {section:"member", q:"Before discussing clinical details:", options:["Confirm HIPAA release","Skip verification","Ask for reject code","Transfer"], a:0, expl:"Confirm HIPAA release.", term:"Compliance", playbookLang:"Per playbook: 'Confirm HIPAA release before sharing PHI.'"},
+      {section:"member", q:"If verification fails after multiple attempts:", options:["End call and note failure","Proceed anyway","Assign R15","Escalate"], a:0, expl:"End call and note failure.", term:"Eligibility", playbookLang:"Per playbook: 'End call and record verification failure.'"},
+      {section:"member", q:"Which tool supports verification?", options:["Eligibility portal","Supervisor notes","Reject code chart","Email"], a:0, expl:"Eligibility portal supports verification.", term:"Eligibility", playbookLang:"Per playbook: 'Use eligibility portal for verification.'"},
+      {section:"member", q:"What must be documented after verification?", options:["Caller identity","Actions taken","Supervisor initials","Nothing"], a:1, expl:"Document actions taken.", term:"Documentation", playbookLang:"Per playbook: 'Document verification actions.'"},
+      {section:"member", q:"If caller refuses to verify:", options:["End call politely","Proceed","Escalate","Assign R20"], a:0, expl:"End call politely.", term:"Eligibility", playbookLang:"Per playbook: 'End call if caller refuses verification.'"},
+      {section:"member", q:"Verification ensures:", options:["Compliance","Shorter calls","Skipping documentation","Avoiding escalation"], a:0, expl:"Verification ensures compliance.", term:"Compliance", playbookLang:"Per playbook: 'Verification ensures compliance and accuracy.'"},
+      
+      // Clinical Review (10)
+      {section:"clinical", q:"Which system tracks workflows?", options:["MHK","Email","Spreadsheet","Chat"], a:0, expl:"MHK tracks workflows.", term:"MHK", playbookLang:"Per playbook: 'Track workflows in MHK.'"},
+      {section:"clinical", q:"What starts a review?", options:["PA need","Survey","Supervisor request","System downtime"], a:0, expl:"PA need starts review.", term:"MHK", playbookLang:"Per playbook: 'Reviews start when PA is required.'"},
+      {section:"clinical", q:"Before applying code:", options:["Confirm eligibility","Ask supervisor","Close case","Send survey"], a:0, expl:"Confirm eligibility first.", term:"Eligibility", playbookLang:"Per playbook: 'Confirm eligibility before coding.'"},
+      {section:"clinical", q:"Final step before closing:", options:["Confirm resolution","Assign code","Escalate","Delete notes"], a:0, expl:"Confirm resolution.", term:"Documentation", playbookLang:"Per playbook: 'Confirm resolution before closing.'"},
+      {section:"clinical", q:"If criteria unclear:", options:["Check protocols","Guess","Apply R99","Skip notes"], a:0, expl:"Check protocols.", term:"Compliance", playbookLang:"Per playbook: 'Check protocols if criteria unclear.'"},
+      {section:"clinical", q:"Urgent requests:", options:["Flag urgency","Ignore","Transfer","Skip"], a:0, expl:"Flag urgency.", term:"Escalation", playbookLang:"Per playbook: 'Flag urgency and escalate.'"},
+      {section:"clinical", q:"Documentation must include:", options:["Actions","Caller mood","Supervisor initials","Nothing"],
