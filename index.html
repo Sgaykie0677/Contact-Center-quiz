@@ -15,11 +15,12 @@
   /* Typography */
   h1 { font-size: 24px; margin-bottom: 16px; color: #0a66c2; }
   h2 { font-size: 18px; margin-bottom: 12px; }
+  p { line-height: 1.5; color: #555; }
   
   /* Form Elements */
-  select, button { padding: 10px 16px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; cursor: pointer; }
-  select { margin-right: 10px; margin-bottom: 10px; width: 100%; max-width: 300px; }
-  button.primary { background: #0a66c2; color: #fff; border: none; font-weight: 600; }
+  select, button { padding: 12px 16px; border-radius: 8px; border: 1px solid #ddd; font-size: 16px; cursor: pointer; }
+  select { margin-right: 10px; margin-bottom: 15px; width: 100%; max-width: 400px; display: block; background-color: white; }
+  button.primary { background: #0a66c2; color: #fff; border: none; font-weight: 600; transition: background 0.2s; }
   button.primary:hover { background: #004182; }
   
   /* Quiz Layout */
@@ -45,7 +46,7 @@
   .feedback-label { font-weight: 700; margin-right: 5px; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; opacity: 0.8; display: block; margin-bottom: 4px; }
   
   /* Utility */
-  .hidden { display: none; }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
@@ -56,17 +57,21 @@
   <div class="card" id="setupCard">
     <h2>Select a Study Section</h2>
     <p>Choose one of the 9 sections from the Study Packet to begin.</p>
-    <select id="sectionSelect"></select>
-    <br><br>
-    <button class="primary" onclick="startQuiz()">Start Quiz</button>
+    
+    <select id="sectionSelect">
+      <option value="" disabled selected>Loading sections...</option>
+    </select>
+    
+    <br>
+    <button class="primary" id="startBtn">Start Quiz</button>
   </div>
 
   <div class="card hidden" id="quizCard">
     <div id="quizContainer"></div>
     
     <div style="margin-top: 20px;">
-      <button class="primary" id="submitBtn" onclick="submitAnswer()">Submit Answer</button>
-      <button class="primary hidden" id="nextBtn" onclick="nextQuestion()">Next Question</button>
+      <button class="primary hidden" id="submitBtn">Submit Answer</button>
+      <button class="primary hidden" id="nextBtn">Next Question</button>
     </div>
     
     <div id="finalScore" class="hidden" style="margin-top:20px; font-weight:bold; font-size:18px; text-align: center;"></div>
@@ -74,632 +79,265 @@
 </div>
 
 <script>
-// --- 1. DATA STRUCTURE (From Study Packet) ---
-const DEFINITIONS = {
-  [cite_start]"HIPAA": "Health Insurance Portability and Accountability Act. Requires 3 identifiers for verification[cite: 131].",
-  "PHI": "Protected Health Information. [cite_start]Cannot be shared without verification[cite: 144].",
-  "Phase 1": "Benefits Check Stage (Vendor Call). No prescriber assigned. [cite_start]No PHI shared[cite: 144].",
-  "Phase 2": "Provider Assigned Stage (Vendor Call). Prescriber known. [cite_start]PHI can be shared[cite: 145].",
-  [cite_start]"Advocate": "The system used to document all calls, tickets, and notes[cite: 157].",
-  [cite_start]"NICE/MAX": "Telephony system for call handling and status codes[cite: 187].",
-  "Slack": "Internal communication tool. [cite_start]Strictly NO PHI allowed[cite: 188].",
-  [cite_start]"Language Line": "24/7 translation service provider[cite: 189].",
-  [cite_start]"Walgreens Mail Service": "Rightway's primary in-network mail order provider[cite: 201].",
-  "MCCP": "Mark Cuban Cost Plus Drugs. [cite_start]Offers generic medications only[cite: 203].",
-  [cite_start]"MHK": "System used for Clinical Reviews, PA cases, and troubleshooting[cite: 230].",
-  [cite_start]"Tredium": "System used for processing claim reversals[cite: 242].",
-  "TAT": "Turn-Around-Time. [cite_start]The deadline for reviewing clinical cases[cite: 230].",
-  [cite_start]"75": "Reject Code: Prior Authorization Required[cite: 216].",
-  [cite_start]"70": "Reject Code: Drug Not Covered[cite: 218].",
-  [cite_start]"79": "Reject Code: Refill Too Soon[cite: 219].",
-  [cite_start]"9G": "Reject Code: Quantity Limit[cite: 220]."
-};
+// Wait for the DOM to fully load before running scripts
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // --- 1. DATA STRUCTURE (From Study Packet) ---
+    const DEFINITIONS = {
+      "HIPAA": "Health Insurance Portability and Accountability Act. Requires 3 identifiers for verification.",
+      "PHI": "Protected Health Information. Cannot be shared without verification.",
+      "Phase 1": "Benefits Check Stage (Vendor Call). No prescriber assigned. No PHI shared.",
+      "Phase 2": "Provider Assigned Stage (Vendor Call). Prescriber known. PHI can be shared.",
+      "Advocate": "The system used to document all calls, tickets, and notes.",
+      "NICE/MAX": "Telephony system for call handling and status codes.",
+      "Slack": "Internal communication tool. Strictly NO PHI allowed.",
+      "Language Line": "24/7 translation service provider.",
+      "Walgreens Mail Service": "Rightway's primary in-network mail order provider.",
+      "MCCP": "Mark Cuban Cost Plus Drugs. Offers generic medications only.",
+      "MHK": "System used for Clinical Reviews, PA cases, and troubleshooting.",
+      "Tredium": "System used for processing claim reversals.",
+      "TAT": "Turn-Around-Time. The deadline for reviewing clinical cases.",
+      "75": "Reject Code: Prior Authorization Required.",
+      "70": "Reject Code: Drug Not Covered.",
+      "79": "Reject Code: Refill Too Soon.",
+      "9G": "Reject Code: Quantity Limit."
+    };
 
-const QUESTIONS = [
-  // SECTION 1: GREETING & HIPAA VERIFICATION
-  {
-    section: "1. Greeting & HIPAA Verification",
-    q: "What must you state during the greeting of every outbound call?",
-    options: ["Your employee ID", "That the line is recorded", "The member's address", "The date and time"],
-    correctIndex: 1,
-    explanation: "It is a legal/compliance requirement to inform the called party that the line is recorded.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'Outbound calls: must state recorded line.' [cite: 130]"
-  },
-  {
-    section: "1. Greeting & HIPAA Verification",
-    q: "How many identifiers are required to verify HIPAA compliance?",
-    options: ["1", "2", "3", "4"],
-    correctIndex: 2,
-    explanation: "You must verify three distinct identifiers to proceed with the call.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'HIPAA: 3 identifiers required.' [cite: 131]"
-  },
-  {
-    section: "1. Greeting & HIPAA Verification",
-    q: "Which two identifiers are MANDATORY for every call?",
-    options: ["Full Name + SSN", "Full Name + DOB", "Address + ID Number", "Phone Number + DOB"],
-    correctIndex: 1,
-    explanation: "While you need 3 total, Name and DOB must always be included.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: '3 identifiers required (full name + DOB mandatory).' [cite: 131]"
-  },
-  {
-    section: "1. Greeting & HIPAA Verification",
-    q: "If a caller says, 'I'm Paul, calling about my wife's medication,' what is the correct response?",
-    options: ["Give him the info", "Ask for her DOB", "Ask for the member or a HIPAA form", "Hang up"],
-    correctIndex: 2,
-    explanation: "You cannot discuss a spouse's data without consent or a form on file.",
-    term: "PHI",
-    [cite_start]playbookLang: "Per playbook: 'For HIPAA purposes, I'll need the member on the line or a HIPAA form on file.' [cite: 138]"
-  },
-  {
-    section: "1. Greeting & HIPAA Verification",
-    q: "When must you perform HIPAA verification?",
-    options: ["Only on inbound calls", "Only on outbound calls", "Every time you speak with a member", "Once per day"],
-    correctIndex: 2,
-    explanation: "Verification is required for every interaction, even if the call was transferred to you.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'HIPAA verification every time you speak with a member, even if transferred.' [cite: 135]"
-  },
-  {
-    section: "1. Greeting & HIPAA Verification",
-    q: "Which of the following is an acceptable identifier?",
-    options: ["Voice recognition", "Caller ID", "Medication Name", "Email address"],
-    correctIndex: 2,
-    explanation: "Medication name is a valid third identifier.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'Acceptable identifiers: ... medication name.' [cite: 136]"
-  },
-  {
-    section: "1. Greeting & HIPAA Verification",
-    q: "Is Social Security Number (SSN) a preferred identifier?",
-    options: ["Yes, it is the best one", "No, it is a last resort", "It is never allowed", "Only for Medicare"],
-    correctIndex: 1,
-    explanation: "SSN should only be used if other identifiers cannot be verified.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'Acceptable identifiers: ... SSN (last resort).' [cite: 136]"
-  },
-  {
-    section: "1. Greeting & HIPAA Verification",
-    q: "What is the standard Inbound Greeting?",
-    options: ["Rightway, help me.", "Thank you for calling Rightway; this is [Name]. May I have your name?", "Who is this?", "Please hold."],
-    correctIndex: 1,
-    explanation: "You must identify the company, yourself, and ask for the caller's details.",
-    term: "HIPAA",
-    playbookLang: "Per playbook: 'Thank you for calling Rightway; this is [Name]. [cite_start]May I have your name and callback number?' [cite: 134]"
-  },
+    const QUESTIONS = [
+        // SECTION 1: GREETING & HIPAA VERIFICATION
+        { section: "1. [cite_start]Greeting & HIPAA Verification", q: "What must you state during the greeting of every outbound call?", options: ["Your employee ID", "That the line is recorded", "The member's address", "The date and time"], correctIndex: 1, explanation: "It is a legal/compliance requirement to inform the called party that the line is recorded[cite: 5].", term: "HIPAA", playbookLang: "Per playbook: 'Outbound calls: must state recorded line.'" },
+        { section: "1. [cite_start]Greeting & HIPAA Verification", q: "How many identifiers are required to verify HIPAA compliance?", options: ["1", "2", "3", "4"], correctIndex: 2, explanation: "You must verify three distinct identifiers to proceed with the call[cite: 6].", term: "HIPAA", playbookLang: "Per playbook: 'HIPAA: 3 identifiers required.'" },
+        { section: "1. [cite_start]Greeting & HIPAA Verification", q: "Which two identifiers are MANDATORY for every call?", options: ["Full Name + SSN", "Full Name + DOB", "Address + ID Number", "Phone Number + DOB"], correctIndex: 1, explanation: "While you need 3 total, Name and DOB must always be included[cite: 6].", term: "HIPAA", playbookLang: "Per playbook: '3 identifiers required (full name + DOB mandatory).'" },
+        { section: "1. [cite_start]Greeting & HIPAA Verification", q: "If a caller says, 'I'm Paul, calling about my wife's medication,' what is the correct response?", options: ["Give him the info", "Ask for her DOB", "Ask for the member or a HIPAA form", "Hang up"], correctIndex: 2, explanation: "You cannot discuss a spouse's data without consent or a form on file[cite: 13].", term: "PHI", playbookLang: "Per playbook: 'For HIPAA purposes, I'll need the member on the line or a HIPAA form on file.'" },
+        { section: "1. [cite_start]Greeting & HIPAA Verification", q: "When must you perform HIPAA verification?", options: ["Only on inbound calls", "Only on outbound calls", "Every time you speak with a member", "Once per day"], correctIndex: 2, explanation: "Verification is required for every interaction, even if the call was transferred to you[cite: 10].", term: "HIPAA", playbookLang: "Per playbook: 'HIPAA verification every time you speak with a member, even if transferred.'" },
+        { section: "1. [cite_start]Greeting & HIPAA Verification", q: "Which of the following is an acceptable identifier?", options: ["Voice recognition", "Caller ID", "Medication Name", "Email address"], correctIndex: 2, explanation: "Medication name is a valid third identifier[cite: 11].", term: "HIPAA", playbookLang: "Per playbook: 'Acceptable identifiers: ... medication name.'" },
+        { section: "1. [cite_start]Greeting & HIPAA Verification", q: "Is Social Security Number (SSN) a preferred identifier?", options: ["Yes, it is the best one", "No, it is a last resort", "It is never allowed", "Only for Medicare"], correctIndex: 1, explanation: "SSN should only be used if other identifiers cannot be verified[cite: 11].", term: "HIPAA", playbookLang: "Per playbook: 'Acceptable identifiers: ... SSN (last resort).'" },
+        { section: "1. Greeting & HIPAA Verification", q: "What is the standard Inbound Greeting?", options: ["Rightway, help me.", "Thank you for calling Rightway; this is [Name]. [cite_start]May I have your name?", "Who is this?", "Please hold."], correctIndex: 1, explanation: "You must identify the company, yourself, and ask for the caller's details[cite: 9].", term: "HIPAA", playbookLang: "Per playbook: 'Thank you for calling Rightway; this is [Name]. May I have your name and callback number?'" },
 
-  // SECTION 2: CALL PHASES (VENDOR CALLS)
-  {
-    section: "2. Call Phases (Vendor Calls)",
-    q: "What characterizes a Phase 1 call?",
-    options: ["Prescriber is assigned", "Benefits Check, no prescriber assigned", "Active PA exists", "Post-surgery check"],
-    correctIndex: 1,
-    explanation: "Phase 1 is exploratory; the vendor does not yet have a specific doctor attached.",
-    term: "Phase 1",
-    [cite_start]playbookLang: "Per playbook: 'Phase 1 (Benefits Check, no prescriber).' [cite: 144]"
-  },
-  {
-    section: "2. Call Phases (Vendor Calls)",
-    q: "Can you share PHI during a Phase 1 call?",
-    options: ["Yes, always", "Only if the vendor asks nicely", "No, unless member is present", "Yes, if recorded"],
-    correctIndex: 2,
-    explanation: "Without a prescriber relationship, the vendor is a third party.",
-    term: "PHI",
-    [cite_start]playbookLang: "Per playbook: 'No PHI unless member present or HIPAA form.' [cite: 144]"
-  },
-  {
-    section: "2. Call Phases (Vendor Calls)",
-    q: "What characterizes a Phase 2 call?",
-    options: ["No prescriber", "Cold calling", "Provider assigned, PA stage", "Marketing call"],
-    correctIndex: 2,
-    explanation: "Phase 2 means they are acting as the healthcare provider.",
-    term: "Phase 2",
-    [cite_start]playbookLang: "Per playbook: 'Phase 2 (Provider assigned, PA stage).' [cite: 145]"
-  },
-  {
-    section: "2. Call Phases (Vendor Calls)",
-    q: "What information can be shared in Phase 2?",
-    options: ["Nothing", "Benefit info, PA requirements, medication details", "Member's home address", "Member's income"],
-    correctIndex: 1,
-    explanation: "Since they are the provider, they are entitled to coverage details.",
-    term: "Phase 2",
-    [cite_start]playbookLang: "Per playbook: 'Share benefit info, PA requirements/status, medication details.' [cite: 145]"
-  },
-  {
-    section: "2. Call Phases (Vendor Calls)",
-    q: "What is the 'Golden Question' to determine the phase?",
-    options: ["Who are you?", "Are you calling on behalf of a prescriber...?", "Do you want to sell something?", "Is the member sick?"],
-    correctIndex: 1,
-    explanation: "You must determine if they have a prescriber to know if they are Phase 1 or 2.",
-    term: "Phase 2",
-    [cite_start]playbookLang: "Per playbook: 'Are you calling on behalf of a prescriber regarding an active or pending PA?' [cite: 149]"
-  },
-  {
-    section: "2. Call Phases (Vendor Calls)",
-    q: "In Phase 1, the vendor is considered a:",
-    options: ["Healthcare Provider", "Third Party", "Member", "Government Entity"],
-    correctIndex: 1,
-    explanation: "They are a third party until a provider is assigned.",
-    term: "Phase 1",
-    [cite_start]playbookLang: "Per playbook: 'Phase 1 = third party, no PHI.' [cite: 147]"
-  },
+        // SECTION 2: CALL PHASES (VENDOR CALLS)
+        { section: "2. [cite_start]Call Phases (Vendor Calls)", q: "What characterizes a Phase 1 call?", options: ["Prescriber is assigned", "Benefits Check, no prescriber assigned", "Active PA exists", "Post-surgery check"], correctIndex: 1, explanation: "Phase 1 is exploratory; the vendor does not yet have a specific doctor attached[cite: 19].", term: "Phase 1", playbookLang: "Per playbook: 'Phase 1 (Benefits Check, no prescriber).'" },
+        { section: "2. [cite_start]Call Phases (Vendor Calls)", q: "Can you share PHI during a Phase 1 call?", options: ["Yes, always", "Only if the vendor asks nicely", "No, unless member is present", "Yes, if recorded"], correctIndex: 2, explanation: "Without a prescriber relationship, the vendor is a third party[cite: 19].", term: "PHI", playbookLang: "Per playbook: 'No PHI unless member present or HIPAA form.'" },
+        { section: "2. [cite_start]Call Phases (Vendor Calls)", q: "What characterizes a Phase 2 call?", options: ["No prescriber", "Cold calling", "Provider assigned, PA stage", "Marketing call"], correctIndex: 2, explanation: "Phase 2 means they are acting as the healthcare provider[cite: 20].", term: "Phase 2", playbookLang: "Per playbook: 'Phase 2 (Provider assigned, PA stage).'" },
+        { section: "2. [cite_start]Call Phases (Vendor Calls)", q: "What information can be shared in Phase 2?", options: ["Nothing", "Benefit info, PA requirements, medication details", "Member's home address", "Member's income"], correctIndex: 1, explanation: "Since they are the provider, they are entitled to coverage details[cite: 20].", term: "Phase 2", playbookLang: "Per playbook: 'Share benefit info, PA requirements/status, medication details.'" },
+        { section: "2. [cite_start]Call Phases (Vendor Calls)", q: "What is the 'Golden Question' to determine the phase?", options: ["Who are you?", "Are you calling on behalf of a prescriber...?", "Do you want to sell something?", "Is the member sick?"], correctIndex: 1, explanation: "You must determine if they have a prescriber to know if they are Phase 1 or 2[cite: 24].", term: "Phase 2", playbookLang: "Per playbook: 'Are you calling on behalf of a prescriber regarding an active or pending PA?'" },
+        { section: "2. [cite_start]Call Phases (Vendor Calls)", q: "In Phase 1, the vendor is considered a:", options: ["Healthcare Provider", "Third Party", "Member", "Government Entity"], correctIndex: 1, explanation: "They are a third party until a provider is assigned[cite: 22].", term: "Phase 1", playbookLang: "Per playbook: 'Phase 1 = third party, no PHI.'" },
 
-  // SECTION 3: DOCUMENTATION
-  {
-    section: "3. Documentation",
-    q: "What system is used to document calls?",
-    options: ["Salesforce", "Advocate", "Excel", "Notepad"],
-    correctIndex: 1,
-    explanation: "Advocate is the system of record.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'All calls documented in Advocate.' [cite: 157]"
-  },
-  {
-    section: "3. Documentation",
-    q: "What is the standard 'Wrap-up time'?",
-    options: ["30 seconds", "60 seconds", "90 seconds", "5 minutes"],
-    correctIndex: 2,
-    explanation: "You have 90 seconds post-call to finish notes.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Wrap-up time = 90 seconds.' [cite: 159]"
-  },
-  {
-    section: "3. Documentation",
-    q: "For a single interaction call, how do you handle the ticket?",
-    options: ["Leave it open", "Delete it", "Close it", "Transfer it"],
-    correctIndex: 2,
-    explanation: "If resolved, close the ticket.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Single interaction -> closed ticket.' [cite: 163]"
-  },
-  {
-    section: "3. Documentation",
-    q: "If a member calls back on the same issue, what do you do?",
-    options: ["Create a new ticket", "Update the existing ticket", "Ignore the previous notes", "Tell them to call later"],
-    correctIndex: 1,
-    explanation: "Do not create duplicates; maintain the thread.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Multiple interaction -> update existing ticket, don't create duplicates.' [cite: 165]"
-  },
-  {
-    section: "3. Documentation",
-    q: "What specific details must be documented?",
-    options: ["Member's mood", "Drug names and quoted pricing", "Weather", "Caller's accent"],
-    correctIndex: 1,
-    explanation: "Financial and clinical details are critical for audits.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Document drug names, quoted pricing.' [cite: 162]"
-  },
+        // SECTION 3: DOCUMENTATION
+        { section: "3. [cite_start]Documentation", q: "What system is used to document calls?", options: ["Salesforce", "Advocate", "Excel", "Notepad"], correctIndex: 1, explanation: "Advocate is the system of record[cite: 32].", term: "Advocate", playbookLang: "Per playbook: 'All calls documented in Advocate.'" },
+        { section: "3. [cite_start]Documentation", q: "What is the standard 'Wrap-up time'?", options: ["30 seconds", "60 seconds", "90 seconds", "5 minutes"], correctIndex: 2, explanation: "You have 90 seconds post-call to finish notes[cite: 34].", term: "Advocate", playbookLang: "Per playbook: 'Wrap-up time = 90 seconds.'" },
+        { section: "3. [cite_start]Documentation", q: "For a single interaction call, how do you handle the ticket?", options: ["Leave it open", "Delete it", "Close it", "Transfer it"], correctIndex: 2, explanation: "If resolved, close the ticket[cite: 38].", term: "Advocate", playbookLang: "Per playbook: 'Single interaction -> closed ticket.'" },
+        { section: "3. [cite_start]Documentation", q: "If a member calls back on the same issue, what do you do?", options: ["Create a new ticket", "Update the existing ticket", "Ignore the previous notes", "Tell them to call later"], correctIndex: 1, explanation: "Do not create duplicates; maintain the thread[cite: 40].", term: "Advocate", playbookLang: "Per playbook: 'Multiple interaction -> update existing ticket, don't create duplicates.'" },
+        { section: "3. [cite_start]Documentation", q: "What specific details must be documented?", options: ["Member's mood", "Drug names and quoted pricing", "Weather", "Caller's accent"], correctIndex: 1, explanation: "Financial and clinical details are critical for audits[cite: 37].", term: "Advocate", playbookLang: "Per playbook: 'Document drug names, quoted pricing.'" },
 
-  // SECTION 4: ESCALATION PROCEDURES
-  {
-    section: "4. Escalation Procedures",
-    q: "What is the first step if a member mentions suicide?",
-    options: ["Transfer to supervisor", "Follow protocol immediately", "Hang up", "Ignore it"],
-    correctIndex: 1,
-    explanation: "Safety is the priority; strictly follow the protocol.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Suicide/homicide -> follow protocol immediately.' [cite: 173]"
-  },
-  {
-    section: "4. Escalation Procedures",
-    q: "Who should you alert during a suicide threat?",
-    options: ["No one", "The police only", "Supervisor via Slack", "HR"],
-    correctIndex: 2,
-    explanation: "Supervisors can provide support/intervention.",
-    term: "Slack",
-    [cite_start]playbookLang: "Per playbook: 'Alert supervisor via Slack.' [cite: 173]"
-  },
-  {
-    section: "4. Escalation Procedures",
-    q: "If a member asks for a supervisor, what should you do *before* transferring?",
-    options: ["Transfer immediately", "Argue", "Gather info first", "Put on hold for 10 mins"],
-    correctIndex: 2,
-    explanation: "This helps the supervisor prepare for the conversation.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Supervisor escalation -> gather info first, then transfer.' [cite: 175]"
-  },
-  {
-    section: "4. Escalation Procedures",
-    q: "Which of the following is a supervisor?",
-    options: ["Paul", "Jessica", "George", "Ringo"],
-    correctIndex: 1,
-    explanation: "Jessica is listed as a contact center supervisor.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Supervisors: Jessica, Kassandra...' [cite: 178]"
-  },
-  {
-    section: "4. Escalation Procedures",
-    q: "What should you attempt before transferring a supervisor call?",
-    options: ["De-escalation", "Hanging up", "Refunds", "Documentation"],
-    correctIndex: 0,
-    explanation: "Try to resolve the issue yourself first.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Always attempt de-escalation before transfer.' [cite: 178]"
-  },
+        // SECTION 4: ESCALATION PROCEDURES
+        { section: "4. [cite_start]Escalation Procedures", q: "What is the first step if a member mentions suicide?", options: ["Transfer to supervisor", "Follow protocol immediately", "Hang up", "Ignore it"], correctIndex: 1, explanation: "Safety is the priority; strictly follow the protocol[cite: 48].", term: "Advocate", playbookLang: "Per playbook: 'Suicide/homicide -> follow protocol immediately.'" },
+        { section: "4. [cite_start]Escalation Procedures", q: "Who should you alert during a suicide threat?", options: ["No one", "The police only", "Supervisor via Slack", "HR"], correctIndex: 2, explanation: "Supervisors can provide support/intervention[cite: 48].", term: "Slack", playbookLang: "Per playbook: 'Alert supervisor via Slack.'" },
+        { section: "4. [cite_start]Escalation Procedures", q: "If a member asks for a supervisor, what should you do *before* transferring?", options: ["Transfer immediately", "Argue", "Gather info first", "Put on hold for 10 mins"], correctIndex: 2, explanation: "This helps the supervisor prepare for the conversation[cite: 51].", term: "Advocate", playbookLang: "Per playbook: 'Supervisor escalation -> gather info first, then transfer.'" },
+        { section: "4. [cite_start]Escalation Procedures", q: "Which of the following is a supervisor?", options: ["Paul", "Jessica", "George", "Ringo"], correctIndex: 1, explanation: "Jessica is listed as a contact center supervisor[cite: 53].", term: "Advocate", playbookLang: "Per playbook: 'Supervisors: Jessica, Kassandra...'" },
+        { section: "4. [cite_start]Escalation Procedures", q: "What should you attempt before transferring a supervisor call?", options: ["De-escalation", "Hanging up", "Refunds", "Documentation"], correctIndex: 0, explanation: "Try to resolve the issue yourself first[cite: 53].", term: "Advocate", playbookLang: "Per playbook: 'Always attempt de-escalation before transfer.'" },
 
-  // SECTION 5: TOOLS & SYSTEMS
-  {
-    section: "5. Tools & Systems",
-    q: "Which platform is used for Call Handling?",
-    options: ["Slack", "NICE/MAX", "Zoom", "Teams"],
-    correctIndex: 1,
-    explanation: "NICE/MAX manages the phone lines.",
-    term: "NICE/MAX",
-    [cite_start]playbookLang: "Per playbook: 'NICE/MAX: Call handling...' [cite: 187]"
-  },
-  {
-    section: "5. Tools & Systems",
-    q: "What is the primary rule for using Slack?",
-    options: ["Use emojis", "No PHI", "All caps", "Send memes"],
-    correctIndex: 1,
-    explanation: "Slack is not HIPAA secure for member data.",
-    term: "Slack",
-    [cite_start]playbookLang: "Per playbook: 'Slack: Team communication, no PHI.' [cite: 188]"
-  },
-  {
-    section: "5. Tools & Systems",
-    q: "What service do you use for non-English speakers?",
-    options: ["Google Translate", "Language Line", "Guessing", "Hang up"],
-    correctIndex: 1,
-    explanation: "Language Line provides interpreters.",
-    term: "Language Line",
-    [cite_start]playbookLang: "Per playbook: 'Language Line: Translation services, 24/7.' [cite: 189]"
-  },
-  {
-    section: "5. Tools & Systems",
-    q: "When using Language Line, who do you speak to?",
-    options: ["The interpreter", "The caller directly", "Your supervisor", "No one"],
-    correctIndex: 1,
-    explanation: "Maintain the connection with the member.",
-    term: "Language Line",
-    [cite_start]playbookLang: "Per playbook: 'Speak directly to caller, not interpreter.' [cite: 193]"
-  },
-  {
-    section: "5. Tools & Systems",
-    q: "What browser settings must be enabled for MAX?",
-    options: ["Dark mode", "Pop-ups and A/V notifications", "Incognito mode", "Ad blocker"],
-    correctIndex: 1,
-    explanation: "These allow calls to come through visible.",
-    term: "NICE/MAX",
-    [cite_start]playbookLang: "Per playbook: 'MAX settings must allow pop-ups and A/V notifications.' [cite: 191]"
-  },
+        // SECTION 5: TOOLS & SYSTEMS
+        { section: "5. [cite_start]Tools & Systems", q: "Which platform is used for Call Handling?", options: ["Slack", "NICE/MAX", "Zoom", "Teams"], correctIndex: 1, explanation: "NICE/MAX manages the phone lines[cite: 62].", term: "NICE/MAX", playbookLang: "Per playbook: 'NICE/MAX: Call handling...'" },
+        { section: "5. [cite_start]Tools & Systems", q: "What is the primary rule for using Slack?", options: ["Use emojis", "No PHI", "All caps", "Send memes"], correctIndex: 1, explanation: "Slack is not HIPAA secure for member data[cite: 63].", term: "Slack", playbookLang: "Per playbook: 'Slack: Team communication, no PHI.'" },
+        { section: "5. [cite_start]Tools & Systems", q: "What service do you use for non-English speakers?", options: ["Google Translate", "Language Line", "Guessing", "Hang up"], correctIndex: 1, explanation: "Language Line provides interpreters[cite: 64].", term: "Language Line", playbookLang: "Per playbook: 'Language Line: Translation services, 24/7.'" },
+        { section: "5. [cite_start]Tools & Systems", q: "When using Language Line, who do you speak to?", options: ["The interpreter", "The caller directly", "Your supervisor", "No one"], correctIndex: 1, explanation: "Maintain the connection with the member[cite: 68].", term: "Language Line", playbookLang: "Per playbook: 'Speak directly to caller, not interpreter.'" },
+        { section: "5. [cite_start]Tools & Systems", q: "What browser settings must be enabled for MAX?", options: ["Dark mode", "Pop-ups and A/V notifications", "Incognito mode", "Ad blocker"], correctIndex: 1, explanation: "These allow calls to come through visible[cite: 66].", term: "NICE/MAX", playbookLang: "Per playbook: 'MAX settings must allow pop-ups and A/V notifications.'" },
 
-  // SECTION 6: MAIL ORDER PROVIDERS
-  {
-    section: "6. Mail Order Providers",
-    q: "Who is Rightway's primary mail order provider?",
-    options: ["CVS", "Walgreens Mail Service", "Amazon", "Express Scripts"],
-    correctIndex: 1,
-    explanation: "Walgreens is the primary partner.",
-    term: "Walgreens Mail Service",
-    [cite_start]playbookLang: "Per playbook: 'Walgreens Mail Service = primary mail order.' [cite: 201]"
-  },
-  {
-    section: "6. Mail Order Providers",
-    q: "What does MCCP stand for?",
-    options: ["Mail Center Care Plan", "Mark Cuban Cost Plus", "Medical Care Cost Plan", "Member Care Center"],
-    correctIndex: 1,
-    explanation: "Rightway partners with Mark Cuban Cost Plus Drugs.",
-    term: "MCCP",
-    [cite_start]playbookLang: "Per playbook: 'MCCP (Mark Cuban Cost Plus Drugs).' [cite: 378]"
-  },
-  {
-    section: "6. Mail Order Providers",
-    q: "What type of drugs does MCCP offer?",
-    options: ["Brand names", "Generics only", "Specialty only", "Compounds"],
-    correctIndex: 1,
-    explanation: "MCCP inventory is limited to generics.",
-    term: "MCCP",
-    [cite_start]playbookLang: "Per playbook: 'MCCP = generics only.' [cite: 203]"
-  },
-  {
-    section: "6. Mail Order Providers",
-    q: "Which provider handles Specialty Pharmacy?",
-    options: ["Walgreens Specialty", "MCCP", "Target", "Walmart"],
-    correctIndex: 0,
-    explanation: "Walgreens Specialty is the designated specialty partner.",
-    term: "Walgreens Mail Service",
-    [cite_start]playbookLang: "Per playbook: 'Walgreens Specialty = specialty pharmacy.' [cite: 202]"
-  },
-  {
-    section: "6. Mail Order Providers",
-    q: "Does Walgreens accept Medicaid plans?",
-    options: ["Yes, all of them", "Yes, limited plans", "No, never", "Only in Texas"],
-    correctIndex: 1,
-    explanation: "Coverage is limited for Medicaid.",
-    term: "Walgreens Mail Service",
-    [cite_start]playbookLang: "Per playbook: 'Walgreens accepts limited Medicaid plans.' [cite: 206]"
-  },
+        // SECTION 6: MAIL ORDER PROVIDERS
+        { section: "6. [cite_start]Mail Order Providers", q: "Who is Rightway's primary mail order provider?", options: ["CVS", "Walgreens Mail Service", "Amazon", "Express Scripts"], correctIndex: 1, explanation: "Walgreens is the primary partner[cite: 76].", term: "Walgreens Mail Service", playbookLang: "Per playbook: 'Walgreens Mail Service = primary mail order.'" },
+        { section: "6. [cite_start]Mail Order Providers", q: "What does MCCP stand for?", options: ["Mail Center Care Plan", "Mark Cuban Cost Plus", "Medical Care Cost Plan", "Member Care Center"], correctIndex: 1, explanation: "Rightway partners with Mark Cuban Cost Plus Drugs[cite: 78].", term: "MCCP", playbookLang: "Per playbook: 'MCCP (Mark Cuban Cost Plus Drugs).'" },
+        { section: "6. [cite_start]Mail Order Providers", q: "What type of drugs does MCCP offer?", options: ["Brand names", "Generics only", "Specialty only", "Compounds"], correctIndex: 1, explanation: "MCCP inventory is limited to generics[cite: 78].", term: "MCCP", playbookLang: "Per playbook: 'MCCP = generics only.'" },
+        { section: "6. [cite_start]Mail Order Providers", q: "Which provider handles Specialty Pharmacy?", options: ["Walgreens Specialty", "MCCP", "Target", "Walmart"], correctIndex: 0, explanation: "Walgreens Specialty is the designated specialty partner[cite: 77].", term: "Walgreens Mail Service", playbookLang: "Per playbook: 'Walgreens Specialty = specialty pharmacy.'" },
+        { section: "6. [cite_start]Mail Order Providers", q: "Does Walgreens accept Medicaid plans?", options: ["Yes, all of them", "Yes, limited plans", "No, never", "Only in Texas"], correctIndex: 1, explanation: "Coverage is limited for Medicaid[cite: 81].", term: "Walgreens Mail Service", playbookLang: "Per playbook: 'Walgreens accepts limited Medicaid plans.'" },
 
-  // SECTION 7: COMMON REJECT CODES
-  {
-    section: "7. Common Reject Codes",
-    q: "What does Reject Code 75 mean?",
-    options: ["Drug not covered", "Refill too soon", "PA required", "Quantity limit"],
-    correctIndex: 2,
-    explanation: "75 = Prior Authorization.",
-    term: "75",
-    [cite_start]playbookLang: "Per playbook: '75 = PA required.' [cite: 216]"
-  },
-  {
-    section: "7. Common Reject Codes",
-    q: "What does Reject Code 70 mean?",
-    options: ["Drug not covered", "Plan exclusion", "Refill too soon", "PA required"],
-    correctIndex: 0,
-    explanation: "70 = Drug not covered (Formulary).",
-    term: "70",
-    [cite_start]playbookLang: "Per playbook: '70 = Drug not covered.' [cite: 218]"
-  },
-  {
-    section: "7. Common Reject Codes",
-    q: "What does Reject Code 79 mean?",
-    options: ["Quantity limit", "Refill too soon", "Plan exclusion", "PA required"],
-    correctIndex: 1,
-    explanation: "79 = Refill too soon.",
-    term: "79",
-    [cite_start]playbookLang: "Per playbook: '79 = Refill too soon.' [cite: 219]"
-  },
-  {
-    section: "7. Common Reject Codes",
-    q: "What does Reject Code 9G mean?",
-    options: ["Quantity limit", "Refill too soon", "Drug not covered", "Plan exclusion"],
-    correctIndex: 0,
-    explanation: "9G = Quantity Limit.",
-    term: "9G",
-    [cite_start]playbookLang: "Per playbook: '9G = Quantity limit.' [cite: 220]"
-  },
-  {
-    section: "7. Common Reject Codes",
-    q: "What does Reject Code 76 mean?",
-    options: ["Plan exclusion", "PA required", "Refill too soon", "Quantity limit"],
-    correctIndex: 0,
-    explanation: "76 = Plan exclusion.",
-    term: "70",
-    [cite_start]playbookLang: "Per playbook: '76 = Plan exclusion.' [cite: 217]"
-  },
+        // SECTION 7: COMMON REJECT CODES
+        { section: "7. [cite_start]Common Reject Codes", q: "What does Reject Code 75 mean?", options: ["Drug not covered", "Refill too soon", "PA required", "Quantity limit"], correctIndex: 2, explanation: "75 = Prior Authorization[cite: 91].", term: "75", playbookLang: "Per playbook: '75 = PA required.'" },
+        { section: "7. [cite_start]Common Reject Codes", q: "What does Reject Code 70 mean?", options: ["Drug not covered", "Plan exclusion", "Refill too soon", "PA required"], correctIndex: 0, explanation: "70 = Drug not covered (Formulary)[cite: 93].", term: "70", playbookLang: "Per playbook: '70 = Drug not covered.'" },
+        { section: "7. [cite_start]Common Reject Codes", q: "What does Reject Code 79 mean?", options: ["Quantity limit", "Refill too soon", "Plan exclusion", "PA required"], correctIndex: 1, explanation: "79 = Refill too soon[cite: 94].", term: "79", playbookLang: "Per playbook: '79 = Refill too soon.'" },
+        { section: "7. [cite_start]Common Reject Codes", q: "What does Reject Code 9G mean?", options: ["Quantity limit", "Refill too soon", "Drug not covered", "Plan exclusion"], correctIndex: 0, explanation: "9G = Quantity Limit[cite: 95].", term: "9G", playbookLang: "Per playbook: '9G = Quantity limit.'" },
+        { section: "7. [cite_start]Common Reject Codes", q: "What does Reject Code 76 mean?", options: ["Plan exclusion", "PA required", "Refill too soon", "Quantity limit"], correctIndex: 0, explanation: "76 = Plan exclusion[cite: 92].", term: "70", playbookLang: "Per playbook: '76 = Plan exclusion.'" },
 
-  // SECTION 8: CLINICAL REVIEW & MHK
-  {
-    section: "8. Clinical Review & MHK",
-    q: "What system is used for PA cases?",
-    options: ["Advocate", "MHK", "Slack", "Tredium"],
-    correctIndex: 1,
-    explanation: "MHK is the clinical review system.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'MHK used for PA cases...' [cite: 230]"
-  },
-  {
-    section: "8. Clinical Review & MHK",
-    q: "What does TAT stand for?",
-    options: ["Turn-Around-Time", "Take-A-Turn", "Technical-Action-Team", "Total-Amount-Time"],
-    correctIndex: 0,
-    explanation: "This is the deadline for case reviews.",
-    term: "TAT",
-    [cite_start]playbookLang: "Per playbook: 'Clinical review turnaround times (TAT)...' [cite: 230]"
-  },
-  {
-    section: "8. Clinical Review & MHK",
-    q: "Can a PA case be created via phone?",
-    options: ["No, fax only", "Yes", "Only by supervisors", "Only on weekends"],
-    correctIndex: 1,
-    explanation: "Agents can intake cases by phone.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'Cases can be created via phone.' [cite: 232]"
-  },
-  {
-    section: "8. Clinical Review & MHK",
-    q: "Which specific client has a 'Clinical Line' procedure?",
-    options: ["Walgreens", "Collective Health", "MCCP", "Rightway"],
-    correctIndex: 1,
-    explanation: "Collective Health has specific routing procedures.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'Collective Health Clinical Line procedures apply.' [cite: 233]"
-  },
-  {
-    section: "8. Clinical Review & MHK",
-    q: "If a PA isn't applying correctly, what should you do?",
-    options: ["Ignore it", "Troubleshoot in MHK / Escalate", "Tell member it's denied", "Create a new case"],
-    correctIndex: 1,
-    explanation: "Check the system first, then escalate to clinical navigation.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'Let's check if the PA is applying correctly... If not, I'll escalate.' [cite: 330]"
-  },
+        // SECTION 8: CLINICAL REVIEW & MHK
+        { section: "8. [cite_start]Clinical Review & MHK", q: "What system is used for PA cases?", options: ["Advocate", "MHK", "Slack", "Tredium"], correctIndex: 1, explanation: "MHK is the clinical review system[cite: 105].", term: "MHK", playbookLang: "Per playbook: 'MHK used for PA cases...'" },
+        { section: "8. [cite_start]Clinical Review & MHK", q: "What does TAT stand for?", options: ["Turn-Around-Time", "Take-A-Turn", "Technical-Action-Team", "Total-Amount-Time"], correctIndex: 0, explanation: "This is the deadline for case reviews[cite: 105].", term: "TAT", playbookLang: "Per playbook: 'Clinical review turnaround times (TAT)...'" },
+        { section: "8. [cite_start]Clinical Review & MHK", q: "Can a PA case be created via phone?", options: ["No, fax only", "Yes", "Only by supervisors", "Only on weekends"], correctIndex: 1, explanation: "Agents can intake cases by phone[cite: 107].", term: "MHK", playbookLang: "Per playbook: 'Cases can be created via phone.'" },
+        { section: "8. [cite_start]Clinical Review & MHK", q: "Which specific client has a 'Clinical Line' procedure?", options: ["Walgreens", "Collective Health", "MCCP", "Rightway"], correctIndex: 1, explanation: "Collective Health has specific routing procedures[cite: 108].", term: "MHK", playbookLang: "Per playbook: 'Collective Health Clinical Line procedures apply.'" },
+        { section: "8. [cite_start]Clinical Review & MHK", q: "If a PA isn't applying correctly, what should you do?", options: ["Ignore it", "Troubleshoot in MHK / Escalate", "Tell member it's denied", "Create a new case"], correctIndex: 1, explanation: "Check the system first, then escalate to clinical navigation[cite: 205].", term: "MHK", playbookLang: "Per playbook: 'Let's check if the PA is applying correctly... If not, I'll escalate.'" },
 
-  // SECTION 9: DOWNTIME PROCEDURES
-  {
-    section: "9. Downtime Procedures",
-    q: "What should you use during a system outage?",
-    options: ["Go home", "Paper claims", "Email claims", "Nothing"],
-    correctIndex: 1,
-    explanation: "Paper claims ensure coverage continues during outages.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Use paper claims during downtime.' [cite: 242]"
-  },
-  {
-    section: "9. Downtime Procedures",
-    q: "What system is used for reversals?",
-    options: ["MHK", "Tredium", "Advocate", "Slack"],
-    correctIndex: 1,
-    explanation: "Tredium is the adjudication platform for reversals.",
-    term: "Tredium",
-    [cite_start]playbookLang: "Per playbook: 'Process reversals in Tredium.' [cite: 242]"
-  },
-  {
-    section: "9. Downtime Procedures",
-    q: "How do you handle urgent overrides during downtime?",
-    options: ["Call the CEO", "Use Slack templates", "Wait for system to come back", "Post-it notes"],
-    correctIndex: 1,
-    explanation: "Slack allows the team to manually process urgent needs.",
-    term: "Slack",
-    [cite_start]playbookLang: "Per playbook: 'Urgent overrides via Slack templates.' [cite: 243]"
-  },
-  {
-    section: "9. Downtime Procedures",
-    q: "Where can you find guidance on overrides?",
-    options: ["Google", "Rx Tickets FAQ", "Twitter", "Ask a neighbor"],
-    correctIndex: 1,
-    explanation: "The FAQ document is the standard reference.",
-    term: "Advocate",
-    [cite_start]playbookLang: "Per playbook: 'Always follow Rx Tickets FAQ for overrides.' [cite: 245]"
-  },
-  {
-    section: "9. Downtime Procedures",
-    q: "What template should be used for specialty requests?",
-    options: ["General template", "Specialty template", "Urgent template", "Email"],
-    correctIndex: 1,
-    explanation: "Specialty has unique requirements.",
-    term: "Slack",
-    [cite_start]playbookLang: "Per playbook: 'Specialty requests use specialty template.' [cite: 246]"
-  }
-];
+        // SECTION 9: DOWNTIME PROCEDURES
+        { section: "9. [cite_start]Downtime Procedures", q: "What should you use during a system outage?", options: ["Go home", "Paper claims", "Email claims", "Nothing"], correctIndex: 1, explanation: "Paper claims ensure coverage continues during outages[cite: 117].", term: "Advocate", playbookLang: "Per playbook: 'Use paper claims during downtime.'" },
+        { section: "9. [cite_start]Downtime Procedures", q: "What system is used for reversals?", options: ["MHK", "Tredium", "Advocate", "Slack"], correctIndex: 1, explanation: "Tredium is the adjudication platform for reversals[cite: 117].", term: "Tredium", playbookLang: "Per playbook: 'Process reversals in Tredium.'" },
+        { section: "9. [cite_start]Downtime Procedures", q: "How do you handle urgent overrides during downtime?", options: ["Call the CEO", "Use Slack templates", "Wait for system to come back", "Post-it notes"], correctIndex: 1, explanation: "Slack allows the team to manually process urgent needs[cite: 118].", term: "Slack", playbookLang: "Per playbook: 'Urgent overrides via Slack templates.'" },
+        { section: "9. [cite_start]Downtime Procedures", q: "Where can you find guidance on overrides?", options: ["Google", "Rx Tickets FAQ", "Twitter", "Ask a neighbor"], correctIndex: 1, explanation: "The FAQ document is the standard reference[cite: 120].", term: "Advocate", playbookLang: "Per playbook: 'Always follow Rx Tickets FAQ for overrides.'" },
+        { section: "9. [cite_start]Downtime Procedures", q: "What template should be used for specialty requests?", options: ["General template", "Specialty template", "Urgent template", "Email"], correctIndex: 1, explanation: "Specialty has unique requirements[cite: 121].", term: "Slack", playbookLang: "Per playbook: 'Specialty requests use specialty template.'" }
+    ];
 
-// --- 2. APP LOGIC ---
-let currentSectionData = [];
-let currentIndex = 0;
-let score = 0;
+    // --- 2. APP LOGIC ---
+    let currentSectionData = [];
+    let currentIndex = 0;
+    let score = 0;
 
-// Initialize
-const sectionSelect = document.getElementById("sectionSelect");
-// Extract unique sections
-const uniqueSections = [...new Set(QUESTIONS.map(item => item.section))];
+    // Initialize References
+    const sectionSelect = document.getElementById("sectionSelect");
+    const startBtn = document.getElementById("startBtn");
+    const submitBtn = document.getElementById("submitBtn");
+    const nextBtn = document.getElementById("nextBtn");
 
-// Populate Dropdown
-uniqueSections.forEach(section => {
-  const opt = document.createElement("option");
-  opt.value = section;
-  opt.textContent = section;
-  sectionSelect.appendChild(opt);
+    // Clear loading option
+    sectionSelect.innerHTML = "";
+    
+    // Add default instruction option
+    const defaultOption = document.createElement("option");
+    defaultOption.text = "Select a Section...";
+    defaultOption.value = "";
+    defaultOption.disabled = true;
+    defaultOption.selected = true;
+    sectionSelect.appendChild(defaultOption);
+
+    // Extract unique sections
+    const uniqueSections = [...new Set(QUESTIONS.map(item => item.section))];
+
+    // Populate Dropdown
+    uniqueSections.forEach(section => {
+      const opt = document.createElement("option");
+      opt.value = section;
+      opt.textContent = section;
+      sectionSelect.appendChild(opt);
+    });
+
+    // EVENT LISTENERS
+    startBtn.addEventListener('click', startQuiz);
+    submitBtn.addEventListener('click', submitAnswer);
+    nextBtn.addEventListener('click', nextQuestion);
+
+    // FUNCTIONS
+    function startQuiz() {
+      const selectedSection = sectionSelect.value;
+      if (!selectedSection) {
+        alert("Please select a section first!");
+        return;
+      }
+
+      currentSectionData = QUESTIONS.filter(q => q.section === selectedSection);
+      currentIndex = 0;
+      score = 0;
+      
+      document.getElementById("setupCard").classList.add("hidden");
+      document.getElementById("quizCard").classList.remove("hidden");
+      document.getElementById("finalScore").classList.add("hidden");
+      
+      showQuestion();
+    }
+
+    function showQuestion() {
+      submitBtn.classList.remove("hidden");
+      nextBtn.classList.add("hidden");
+      const container = document.getElementById("quizContainer");
+      container.innerHTML = "";
+      
+      if (currentIndex >= currentSectionData.length) {
+        finishQuiz();
+        return;
+      }
+
+      const qData = currentSectionData[currentIndex];
+      
+      // Title
+      const title = document.createElement("div");
+      title.className = "question-title";
+      title.textContent = `${currentIndex + 1}. ${qData.q}`;
+      container.appendChild(title);
+      
+      // Options
+      const optionsDiv = document.createElement("div");
+      optionsDiv.className = "options";
+      qData.options.forEach((opt, idx) => {
+        const label = document.createElement("label");
+        label.innerHTML = `<input type="radio" name="questionOption" value="${idx}"> ${opt}`;
+        optionsDiv.appendChild(label);
+      });
+      container.appendChild(optionsDiv);
+      
+      // Feedback Area
+      const feedbackDiv = document.createElement("div");
+      feedbackDiv.id = "feedbackArea";
+      container.appendChild(feedbackDiv);
+    }
+
+    function submitAnswer() {
+      const qData = currentSectionData[currentIndex];
+      const selectedEl = document.querySelector('input[name="questionOption"]:checked');
+      
+      if (!selectedEl) {
+        alert("Please select an answer.");
+        return;
+      }
+      
+      const selectedIndex = parseInt(selectedEl.value);
+      const isCorrect = (selectedIndex === qData.correctIndex);
+      
+      if (isCorrect) score++;
+      
+      const feedbackArea = document.getElementById("feedbackArea");
+      const definitionText = DEFINITIONS[qData.term] || "Definition not available.";
+      const correctActionText = qData.options[qData.correctIndex];
+      
+      // Render Feedback
+      feedbackArea.innerHTML = `
+        <div class="feedback-box ${isCorrect ? 'correct' : 'incorrect'}">
+          <div class="feedback-item">
+            <span class="feedback-label">✅ Correct/Incorrect status:</span>
+            ${isCorrect ? '<strong style="color:green">Correct!</strong>' : '<strong style="color:red">Incorrect.</strong>'} 
+            <br>Correct Action: <strong>${correctActionText}</strong>
+          </div>
+
+          <div class="feedback-item">
+            <span class="feedback-label">📘 Explanation:</span>
+            ${qData.explanation}
+          </div>
+
+          <div class="feedback-item">
+            <span class="feedback-label">📖 Definition:</span>
+            <strong>${qData.term}:</strong> ${definitionText}
+          </div>
+
+          <div class="feedback-item">
+            <span class="feedback-label">🗣️ Playbook Language:</span>
+            <em>"${qData.playbookLang}"</em>
+          </div>
+        </div>
+      `;
+      
+      // UI Updates
+      submitBtn.classList.add("hidden");
+      nextBtn.classList.remove("hidden");
+      const radios = document.querySelectorAll('input[name="questionOption"]');
+      radios.forEach(r => r.disabled = true);
+    }
+
+    function nextQuestion() {
+      currentIndex++;
+      showQuestion();
+    }
+
+    function finishQuiz() {
+      const container = document.getElementById("quizContainer");
+      container.innerHTML = "<h2>Quiz Complete!</h2>";
+      submitBtn.classList.add("hidden");
+      nextBtn.classList.add("hidden");
+      
+      const finalScoreDiv = document.getElementById("finalScore");
+      finalScoreDiv.classList.remove("hidden");
+      finalScoreDiv.textContent = `Final Score: ${score} / ${currentSectionData.length}`;
+      
+      const restartBtn = document.createElement("button");
+      restartBtn.className = "primary";
+      restartBtn.textContent = "Return to Menu";
+      restartBtn.style.marginTop = "20px";
+      restartBtn.onclick = () => { location.reload(); };
+      container.appendChild(restartBtn);
+    }
 });
-
-// START
-function startQuiz() {
-  const selectedSection = sectionSelect.value;
-  currentSectionData = QUESTIONS.filter(q => q.section === selectedSection);
-  currentIndex = 0;
-  score = 0;
-  
-  document.getElementById("setupCard").classList.add("hidden");
-  document.getElementById("quizCard").classList.remove("hidden");
-  document.getElementById("finalScore").classList.add("hidden");
-  
-  showQuestion();
-}
-
-// SHOW QUESTION
-function showQuestion() {
-  document.getElementById("submitBtn").classList.remove("hidden");
-  document.getElementById("nextBtn").classList.add("hidden");
-  const container = document.getElementById("quizContainer");
-  container.innerHTML = "";
-  
-  if (currentIndex >= currentSectionData.length) {
-    finishQuiz();
-    return;
-  }
-
-  const qData = currentSectionData[currentIndex];
-  
-  // Title
-  const title = document.createElement("div");
-  title.className = "question-title";
-  title.textContent = `${currentIndex + 1}. ${qData.q}`;
-  container.appendChild(title);
-  
-  // Options
-  const optionsDiv = document.createElement("div");
-  optionsDiv.className = "options";
-  qData.options.forEach((opt, idx) => {
-    const label = document.createElement("label");
-    label.innerHTML = `<input type="radio" name="questionOption" value="${idx}"> ${opt}`;
-    optionsDiv.appendChild(label);
-  });
-  container.appendChild(optionsDiv);
-  
-  // Feedback Area
-  const feedbackDiv = document.createElement("div");
-  feedbackDiv.id = "feedbackArea";
-  container.appendChild(feedbackDiv);
-}
-
-// SUBMIT
-function submitAnswer() {
-  const qData = currentSectionData[currentIndex];
-  const selectedEl = document.querySelector('input[name="questionOption"]:checked');
-  
-  if (!selectedEl) {
-    alert("Please select an answer.");
-    return;
-  }
-  
-  const selectedIndex = parseInt(selectedEl.value);
-  const isCorrect = (selectedIndex === qData.correctIndex);
-  
-  if (isCorrect) score++;
-  
-  const feedbackArea = document.getElementById("feedbackArea");
-  const definitionText = DEFINITIONS[qData.term] || "Definition not available.";
-  const correctActionText = qData.options[qData.correctIndex];
-  
-  // Render Feedback
-  feedbackArea.innerHTML = `
-    <div class="feedback-box ${isCorrect ? 'correct' : 'incorrect'}">
-      <div class="feedback-item">
-        <span class="feedback-label">✅ Correct/Incorrect status:</span>
-        ${isCorrect ? '<strong style="color:green">Correct!</strong>' : '<strong style="color:red">Incorrect.</strong>'} 
-        <br>Correct Action: <strong>${correctActionText}</strong>
-      </div>
-
-      <div class="feedback-item">
-        <span class="feedback-label">📘 Explanation:</span>
-        ${qData.explanation}
-      </div>
-
-      <div class="feedback-item">
-        <span class="feedback-label">📖 Definition:</span>
-        <strong>${qData.term}:</strong> ${definitionText}
-      </div>
-
-      <div class="feedback-item">
-        <span class="feedback-label">🗣️ Playbook Language:</span>
-        <em>"${qData.playbookLang}"</em>
-      </div>
-    </div>
-  `;
-  
-  // UI Updates
-  document.getElementById("submitBtn").classList.add("hidden");
-  document.getElementById("nextBtn").classList.remove("hidden");
-  const radios = document.querySelectorAll('input[name="questionOption"]');
-  radios.forEach(r => r.disabled = true);
-}
-
-// NEXT
-function nextQuestion() {
-  currentIndex++;
-  showQuestion();
-}
-
-// FINISH
-function finishQuiz() {
-  const container = document.getElementById("quizContainer");
-  container.innerHTML = "<h2>Quiz Complete!</h2>";
-  document.getElementById("submitBtn").classList.add("hidden");
-  document.getElementById("nextBtn").classList.add("hidden");
-  
-  const finalScoreDiv = document.getElementById("finalScore");
-  finalScoreDiv.classList.remove("hidden");
-  finalScoreDiv.textContent = `Final Score: ${score} / ${currentSectionData.length}`;
-  
-  const restartBtn = document.createElement("button");
-  restartBtn.className = "primary";
-  restartBtn.textContent = "Return to Menu";
-  restartBtn.style.marginTop = "20px";
-  restartBtn.onclick = () => { location.reload(); };
-  container.appendChild(restartBtn);
-}
 </script>
 
 </body>
