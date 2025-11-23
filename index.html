@@ -1,414 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact Center Playbook Quiz</title>
+<style>
+  /* --- CSS STYLING --- */
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f6f7fb; color: #333; }
+  .container { max-width: 800px; margin: 40px auto; padding: 0 20px; }
+  
+  /* Card Styling */
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 20px; }
+  
+  /* Typography */
+  h1 { font-size: 24px; margin-bottom: 16px; color: #0a66c2; }
+  h2 { font-size: 18px; margin-bottom: 12px; }
+  
+  /* Form Elements */
+  select, button { padding: 10px 16px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; cursor: pointer; }
+  select { margin-right: 10px; margin-bottom: 10px; width: 100%; max-width: 300px; }
+  button.primary { background: #0a66c2; color: #fff; border: none; font-weight: 600; }
+  button.primary:hover { background: #004182; }
+  
+  /* Quiz Layout */
+  .question-title { font-weight: 700; font-size: 18px; margin-bottom: 16px; color: #222; }
+  .options label { display: block; padding: 12px 16px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s; }
+  .options label:hover { background: #f0f7ff; border-color: #0a66c2; }
+  .options input { margin-right: 12px; transform: scale(1.2); }
+
+  /* FEEDBACK BOX STYLING */
+  .feedback-box { 
+    margin-top: 24px; 
+    padding: 20px; 
+    background: #f9fafb; 
+    border-left: 6px solid #ccc; 
+    border-radius: 6px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
+  .feedback-box.correct { border-left-color: #108a00; background: #e6f4e6; }
+  .feedback-box.incorrect { border-left-color: #d93025; background: #fce8e6; }
+  
+  .feedback-item { margin-bottom: 12px; font-size: 15px; line-height: 1.6; }
+  .feedback-item:last-child { margin-bottom: 0; }
+  .feedback-label { font-weight: 700; margin-right: 5px; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; opacity: 0.8; display: block; margin-bottom: 4px; }
+  
+  /* Utility */
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>📘 Contact Center Playbook Quiz</h1>
+  
+  <div class="card" id="setupCard">
+    <h2>Select a Study Section</h2>
+    <p>Choose one of the 9 sections from the Study Packet to begin.</p>
+    <select id="sectionSelect"></select>
+    <br><br>
+    <button class="primary" onclick="startQuiz()">Start Quiz</button>
+  </div>
+
+  <div class="card hidden" id="quizCard">
+    <div id="quizContainer"></div>
+    
+    <div style="margin-top: 20px;">
+      <button class="primary" id="submitBtn" onclick="submitAnswer()">Submit Answer</button>
+      <button class="primary hidden" id="nextBtn" onclick="nextQuestion()">Next Question</button>
+    </div>
+    
+    <div id="finalScore" class="hidden" style="margin-top:20px; font-weight:bold; font-size:18px; text-align: center;"></div>
+  </div>
+</div>
+
 <script>
-// --- 1. DATA STRUCTURE ---
-[cite_start]// Definitions derived from Playbook context [cite: 3-5, 280-302, 680-794]
+// --- 1. DATA STRUCTURE (From Study Packet) ---
 const DEFINITIONS = {
-  "HIPAA": "Federal law requiring the protection of sensitive patient health information.",
-  "Phase 1": "Benefits Check Stage where the vendor/caller does not yet have a prescriber assigned.",
-  "Phase 2": "Provider-Assigned Stage where an active or pending prior authorization exists.",
-  "Language Line": "Service provided by TransPerfect for 24/7 translation assistance.",
-  "Escalation": "Process of transferring a call to a supervisor or specialized team.",
-  "R6": "Reject code: Product/Service Not Appropriate for this Location (often Mandatory Mail).",
-  "7X": "Reject code: Day Supply Exceeds Plan Limitation.",
-  "Opioid Naive": "A patient who has not filled an opioid prescription recently (7-day supply limit).",
-  "70": "Reject code: Drug Not Covered (Formulary exclusion).",
-  "75": "Reject code: Prior Authorization Required.",
-  "79": "Reject code: Refill Too Soon.",
-  "DUR": "Drug Utilization Review (safety checks like drug interactions or high dose).",
-  "MHK": "My Health Kit: The system used to manage clinical reviews and authorizations.",
-  "TAT": "Turn-Around-Time: The required timeframe for making a decision on a case.",
-  "DMR": "Direct Member Reimbursement: Member pays cash and requests a refund.",
-  "Compound": "A medication mixed specifically for a patient, often requiring a dummy NDC (999...) for entry.",
-  "MCCP": "Mark Cuban Cost Plus: A partner pharmacy for generic medications.",
-  "Maintenance Drug": "Medications taken regularly for chronic conditions."
+  [cite_start]"HIPAA": "Health Insurance Portability and Accountability Act. Requires 3 identifiers for verification[cite: 131].",
+  "PHI": "Protected Health Information. [cite_start]Cannot be shared without verification[cite: 144].",
+  "Phase 1": "Benefits Check Stage (Vendor Call). No prescriber assigned. [cite_start]No PHI shared[cite: 144].",
+  "Phase 2": "Provider Assigned Stage (Vendor Call). Prescriber known. [cite_start]PHI can be shared[cite: 145].",
+  [cite_start]"Advocate": "The system used to document all calls, tickets, and notes[cite: 157].",
+  [cite_start]"NICE/MAX": "Telephony system for call handling and status codes[cite: 187].",
+  "Slack": "Internal communication tool. [cite_start]Strictly NO PHI allowed[cite: 188].",
+  [cite_start]"Language Line": "24/7 translation service provider[cite: 189].",
+  [cite_start]"Walgreens Mail Service": "Rightway's primary in-network mail order provider[cite: 201].",
+  "MCCP": "Mark Cuban Cost Plus Drugs. [cite_start]Offers generic medications only[cite: 203].",
+  [cite_start]"MHK": "System used for Clinical Reviews, PA cases, and troubleshooting[cite: 230].",
+  [cite_start]"Tredium": "System used for processing claim reversals[cite: 242].",
+  "TAT": "Turn-Around-Time. [cite_start]The deadline for reviewing clinical cases[cite: 230].",
+  [cite_start]"75": "Reject Code: Prior Authorization Required[cite: 216].",
+  [cite_start]"70": "Reject Code: Drug Not Covered[cite: 218].",
+  [cite_start]"79": "Reject Code: Refill Too Soon[cite: 219].",
+  [cite_start]"9G": "Reject Code: Quantity Limit[cite: 220]."
 };
 
 const QUESTIONS = [
-  // =================================================================
-  // SECTION 1: CALL HANDLING & HIPAA PROCEDURES
-  // =================================================================
+  // SECTION 1: GREETING & HIPAA VERIFICATION
   {
-    section: "Call Handling & HIPAA",
-    q: "What are the mandatory identifiers for every call?",
-    options: ["Full Name and SSN", "Full Name and Date of Birth", "Member ID and Address", "Phone Number and DOB"],
+    section: "1. Greeting & HIPAA Verification",
+    q: "What must you state during the greeting of every outbound call?",
+    options: ["Your employee ID", "That the line is recorded", "The member's address", "The date and time"],
     correctIndex: 1,
-    explanation: "You must verify three identifiers total, but Name and DOB are mandatory for every call.",
+    explanation: "It is a legal/compliance requirement to inform the called party that the line is recorded.",
     term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'Full name and Date of birth are required for every call.'" // [cite: 312]
+    [cite_start]playbookLang: "Per playbook: 'Outbound calls: must state recorded line.' [cite: 130]"
   },
   {
-    section: "Call Handling & HIPAA",
-    q: "How should you start every outbound call?",
-    options: ["Ask for the member immediately", "State your name and that the line is recorded", "Ask for the doctor", "Read the disclaimer at the end"],
-    correctIndex: 1,
-    explanation: "You must inform the person you are calling that the line is recorded immediately.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'Hello, my name is... calling from Rightway on a recorded line.'" // [cite: 318]
-  },
-  {
-    section: "Call Handling & HIPAA",
-    q: "If a Third-Party caller (e.g., Roe) cannot provide a prescriber NPI (Phase 1), what can you share?",
-    options: ["Benefit details", "Copay information", "Nothing without member consent", "Formulary status"],
+    section: "1. Greeting & HIPAA Verification",
+    q: "How many identifiers are required to verify HIPAA compliance?",
+    options: ["1", "2", "3", "4"],
     correctIndex: 2,
-    explanation: "In Phase 1, the vendor is a third party. No PHI can be released without the member present or a HIPAA form.",
+    explanation: "You must verify three distinct identifiers to proceed with the call.",
+    term: "HIPAA",
+    [cite_start]playbookLang: "Per playbook: 'HIPAA: 3 identifiers required.' [cite: 131]"
+  },
+  {
+    section: "1. Greeting & HIPAA Verification",
+    q: "Which two identifiers are MANDATORY for every call?",
+    options: ["Full Name + SSN", "Full Name + DOB", "Address + ID Number", "Phone Number + DOB"],
+    correctIndex: 1,
+    explanation: "While you need 3 total, Name and DOB must always be included.",
+    term: "HIPAA",
+    [cite_start]playbookLang: "Per playbook: '3 identifiers required (full name + DOB mandatory).' [cite: 131]"
+  },
+  {
+    section: "1. Greeting & HIPAA Verification",
+    q: "If a caller says, 'I'm Paul, calling about my wife's medication,' what is the correct response?",
+    options: ["Give him the info", "Ask for her DOB", "Ask for the member or a HIPAA form", "Hang up"],
+    correctIndex: 2,
+    explanation: "You cannot discuss a spouse's data without consent or a form on file.",
+    term: "PHI",
+    [cite_start]playbookLang: "Per playbook: 'For HIPAA purposes, I'll need the member on the line or a HIPAA form on file.' [cite: 138]"
+  },
+  {
+    section: "1. Greeting & HIPAA Verification",
+    q: "When must you perform HIPAA verification?",
+    options: ["Only on inbound calls", "Only on outbound calls", "Every time you speak with a member", "Once per day"],
+    correctIndex: 2,
+    explanation: "Verification is required for every interaction, even if the call was transferred to you.",
+    term: "HIPAA",
+    [cite_start]playbookLang: "Per playbook: 'HIPAA verification every time you speak with a member, even if transferred.' [cite: 135]"
+  },
+  {
+    section: "1. Greeting & HIPAA Verification",
+    q: "Which of the following is an acceptable identifier?",
+    options: ["Voice recognition", "Caller ID", "Medication Name", "Email address"],
+    correctIndex: 2,
+    explanation: "Medication name is a valid third identifier.",
+    term: "HIPAA",
+    [cite_start]playbookLang: "Per playbook: 'Acceptable identifiers: ... medication name.' [cite: 136]"
+  },
+  {
+    section: "1. Greeting & HIPAA Verification",
+    q: "Is Social Security Number (SSN) a preferred identifier?",
+    options: ["Yes, it is the best one", "No, it is a last resort", "It is never allowed", "Only for Medicare"],
+    correctIndex: 1,
+    explanation: "SSN should only be used if other identifiers cannot be verified.",
+    term: "HIPAA",
+    [cite_start]playbookLang: "Per playbook: 'Acceptable identifiers: ... SSN (last resort).' [cite: 136]"
+  },
+  {
+    section: "1. Greeting & HIPAA Verification",
+    q: "What is the standard Inbound Greeting?",
+    options: ["Rightway, help me.", "Thank you for calling Rightway; this is [Name]. May I have your name?", "Who is this?", "Please hold."],
+    correctIndex: 1,
+    explanation: "You must identify the company, yourself, and ask for the caller's details.",
+    term: "HIPAA",
+    playbookLang: "Per playbook: 'Thank you for calling Rightway; this is [Name]. [cite_start]May I have your name and callback number?' [cite: 134]"
+  },
+
+  // SECTION 2: CALL PHASES (VENDOR CALLS)
+  {
+    section: "2. Call Phases (Vendor Calls)",
+    q: "What characterizes a Phase 1 call?",
+    options: ["Prescriber is assigned", "Benefits Check, no prescriber assigned", "Active PA exists", "Post-surgery check"],
+    correctIndex: 1,
+    explanation: "Phase 1 is exploratory; the vendor does not yet have a specific doctor attached.",
     term: "Phase 1",
-    [cite_start]playbookLang: "Per playbook: 'No HIPAA authorization = no information.'" // [cite: 295]
+    [cite_start]playbookLang: "Per playbook: 'Phase 1 (Benefits Check, no prescriber).' [cite: 144]"
   },
   {
-    section: "Call Handling & HIPAA",
-    q: "What identifies a Third-Party caller as being in 'Phase 2'?",
-    options: ["They have the member's DOB", "They provide a Prescriber Name and NPI", "They are calling from a pharmacy", "They ask for eligibility"],
-    correctIndex: 1,
-    explanation: "Once they have a prescriber and are processing a PA, they act as a provider's office.",
+    section: "2. Call Phases (Vendor Calls)",
+    q: "Can you share PHI during a Phase 1 call?",
+    options: ["Yes, always", "Only if the vendor asks nicely", "No, unless member is present", "Yes, if recorded"],
+    correctIndex: 2,
+    explanation: "Without a prescriber relationship, the vendor is a third party.",
+    term: "PHI",
+    [cite_start]playbookLang: "Per playbook: 'No PHI unless member present or HIPAA form.' [cite: 144]"
+  },
+  {
+    section: "2. Call Phases (Vendor Calls)",
+    q: "What characterizes a Phase 2 call?",
+    options: ["No prescriber", "Cold calling", "Provider assigned, PA stage", "Marketing call"],
+    correctIndex: 2,
+    explanation: "Phase 2 means they are acting as the healthcare provider.",
     term: "Phase 2",
-    [cite_start]playbookLang: "Per playbook: 'If they can provide this [Prescriber/NPI], they are in Phase 2... we may proceed.'" // [cite: 301]
+    [cite_start]playbookLang: "Per playbook: 'Phase 2 (Provider assigned, PA stage).' [cite: 145]"
   },
   {
-    section: "Call Handling & HIPAA",
-    q: "When using the Language Line, how should you speak?",
-    options: ["Talk to the interpreter", "Speak directly to the caller", "Speak very loudly", "Use medical jargon"],
+    section: "2. Call Phases (Vendor Calls)",
+    q: "What information can be shared in Phase 2?",
+    options: ["Nothing", "Benefit info, PA requirements, medication details", "Member's home address", "Member's income"],
     correctIndex: 1,
-    explanation: "Maintain the conversation with the member, not the translator.",
+    explanation: "Since they are the provider, they are entitled to coverage details.",
+    term: "Phase 2",
+    [cite_start]playbookLang: "Per playbook: 'Share benefit info, PA requirements/status, medication details.' [cite: 145]"
+  },
+  {
+    section: "2. Call Phases (Vendor Calls)",
+    q: "What is the 'Golden Question' to determine the phase?",
+    options: ["Who are you?", "Are you calling on behalf of a prescriber...?", "Do you want to sell something?", "Is the member sick?"],
+    correctIndex: 1,
+    explanation: "You must determine if they have a prescriber to know if they are Phase 1 or 2.",
+    term: "Phase 2",
+    [cite_start]playbookLang: "Per playbook: 'Are you calling on behalf of a prescriber regarding an active or pending PA?' [cite: 149]"
+  },
+  {
+    section: "2. Call Phases (Vendor Calls)",
+    q: "In Phase 1, the vendor is considered a:",
+    options: ["Healthcare Provider", "Third Party", "Member", "Government Entity"],
+    correctIndex: 1,
+    explanation: "They are a third party until a provider is assigned.",
+    term: "Phase 1",
+    [cite_start]playbookLang: "Per playbook: 'Phase 1 = third party, no PHI.' [cite: 147]"
+  },
+
+  // SECTION 3: DOCUMENTATION
+  {
+    section: "3. Documentation",
+    q: "What system is used to document calls?",
+    options: ["Salesforce", "Advocate", "Excel", "Notepad"],
+    correctIndex: 1,
+    explanation: "Advocate is the system of record.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'All calls documented in Advocate.' [cite: 157]"
+  },
+  {
+    section: "3. Documentation",
+    q: "What is the standard 'Wrap-up time'?",
+    options: ["30 seconds", "60 seconds", "90 seconds", "5 minutes"],
+    correctIndex: 2,
+    explanation: "You have 90 seconds post-call to finish notes.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Wrap-up time = 90 seconds.' [cite: 159]"
+  },
+  {
+    section: "3. Documentation",
+    q: "For a single interaction call, how do you handle the ticket?",
+    options: ["Leave it open", "Delete it", "Close it", "Transfer it"],
+    correctIndex: 2,
+    explanation: "If resolved, close the ticket.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Single interaction -> closed ticket.' [cite: 163]"
+  },
+  {
+    section: "3. Documentation",
+    q: "If a member calls back on the same issue, what do you do?",
+    options: ["Create a new ticket", "Update the existing ticket", "Ignore the previous notes", "Tell them to call later"],
+    correctIndex: 1,
+    explanation: "Do not create duplicates; maintain the thread.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Multiple interaction -> update existing ticket, don't create duplicates.' [cite: 165]"
+  },
+  {
+    section: "3. Documentation",
+    q: "What specific details must be documented?",
+    options: ["Member's mood", "Drug names and quoted pricing", "Weather", "Caller's accent"],
+    correctIndex: 1,
+    explanation: "Financial and clinical details are critical for audits.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Document drug names, quoted pricing.' [cite: 162]"
+  },
+
+  // SECTION 4: ESCALATION PROCEDURES
+  {
+    section: "4. Escalation Procedures",
+    q: "What is the first step if a member mentions suicide?",
+    options: ["Transfer to supervisor", "Follow protocol immediately", "Hang up", "Ignore it"],
+    correctIndex: 1,
+    explanation: "Safety is the priority; strictly follow the protocol.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Suicide/homicide -> follow protocol immediately.' [cite: 173]"
+  },
+  {
+    section: "4. Escalation Procedures",
+    q: "Who should you alert during a suicide threat?",
+    options: ["No one", "The police only", "Supervisor via Slack", "HR"],
+    correctIndex: 2,
+    explanation: "Supervisors can provide support/intervention.",
+    term: "Slack",
+    [cite_start]playbookLang: "Per playbook: 'Alert supervisor via Slack.' [cite: 173]"
+  },
+  {
+    section: "4. Escalation Procedures",
+    q: "If a member asks for a supervisor, what should you do *before* transferring?",
+    options: ["Transfer immediately", "Argue", "Gather info first", "Put on hold for 10 mins"],
+    correctIndex: 2,
+    explanation: "This helps the supervisor prepare for the conversation.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Supervisor escalation -> gather info first, then transfer.' [cite: 175]"
+  },
+  {
+    section: "4. Escalation Procedures",
+    q: "Which of the following is a supervisor?",
+    options: ["Paul", "Jessica", "George", "Ringo"],
+    correctIndex: 1,
+    explanation: "Jessica is listed as a contact center supervisor.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Supervisors: Jessica, Kassandra...' [cite: 178]"
+  },
+  {
+    section: "4. Escalation Procedures",
+    q: "What should you attempt before transferring a supervisor call?",
+    options: ["De-escalation", "Hanging up", "Refunds", "Documentation"],
+    correctIndex: 0,
+    explanation: "Try to resolve the issue yourself first.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Always attempt de-escalation before transfer.' [cite: 178]"
+  },
+
+  // SECTION 5: TOOLS & SYSTEMS
+  {
+    section: "5. Tools & Systems",
+    q: "Which platform is used for Call Handling?",
+    options: ["Slack", "NICE/MAX", "Zoom", "Teams"],
+    correctIndex: 1,
+    explanation: "NICE/MAX manages the phone lines.",
+    term: "NICE/MAX",
+    [cite_start]playbookLang: "Per playbook: 'NICE/MAX: Call handling...' [cite: 187]"
+  },
+  {
+    section: "5. Tools & Systems",
+    q: "What is the primary rule for using Slack?",
+    options: ["Use emojis", "No PHI", "All caps", "Send memes"],
+    correctIndex: 1,
+    explanation: "Slack is not HIPAA secure for member data.",
+    term: "Slack",
+    [cite_start]playbookLang: "Per playbook: 'Slack: Team communication, no PHI.' [cite: 188]"
+  },
+  {
+    section: "5. Tools & Systems",
+    q: "What service do you use for non-English speakers?",
+    options: ["Google Translate", "Language Line", "Guessing", "Hang up"],
+    correctIndex: 1,
+    explanation: "Language Line provides interpreters.",
     term: "Language Line",
-    [cite_start]playbookLang: "Per playbook: 'Speak as if you are talking directly to the caller. NOT to the interpreter.'" // [cite: 345-346]
+    [cite_start]playbookLang: "Per playbook: 'Language Line: Translation services, 24/7.' [cite: 189]"
   },
   {
-    section: "Call Handling & HIPAA",
-    q: "What is the first step if a member threatens suicide?",
-    options: ["Hang up", "Alert your supervisor via Slack immediately", "Transfer to 911", "Tell them to calm down"],
+    section: "5. Tools & Systems",
+    q: "When using Language Line, who do you speak to?",
+    options: ["The interpreter", "The caller directly", "Your supervisor", "No one"],
     correctIndex: 1,
-    explanation: "You must alert leadership immediately while keeping the member on the line if possible.",
-    term: "Escalation",
-    [cite_start]playbookLang: "Per playbook: 'Additionally, please alert your supervisor during the call via Slack...'" // [cite: 350]
+    explanation: "Maintain the connection with the member.",
+    term: "Language Line",
+    [cite_start]playbookLang: "Per playbook: 'Speak directly to caller, not interpreter.' [cite: 193]"
   },
   {
-    section: "Call Handling & HIPAA",
-    q: "If a caller demands a supervisor immediately, what should you attempt first?",
-    options: ["Transfer immediately", "De-escalate and gather information", "Put them on hold forever", "Hang up"],
+    section: "5. Tools & Systems",
+    q: "What browser settings must be enabled for MAX?",
+    options: ["Dark mode", "Pop-ups and A/V notifications", "Incognito mode", "Ad blocker"],
     correctIndex: 1,
-    explanation: "Try to help them first or at least gather the necessary details for the supervisor.",
-    term: "Escalation",
-    [cite_start]playbookLang: "Per playbook: 'Try to de-escalate the call by saying, I will be happy to get a supervisor... Can I gather some information?'" // [cite: 352]
-  },
-  {
-    section: "Call Handling & HIPAA",
-    q: "What letters should be used to spell 'Rightway' using the NATO alphabet?",
-    options: ["Romeo, India, Golf...", "Rabbit, Igloo, Green...", "Radio, Indigo, Golf...", "Red, Ice, Go..."],
-    correctIndex: 0,
-    explanation: "Standard NATO alphabet is required for spelling names and medications.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'The PCN code for this member is R as in Romeo...'" // [cite: 308]
-  },
-  {
-    section: "Call Handling & HIPAA",
-    q: "How many HIPAA identifiers are required to verify a member?",
-    options: ["One", "Two", "Three", "Four"],
-    correctIndex: 2,
-    explanation: "Three identifiers are required. Name and DOB are mandatory, plus one more (Address, ID, etc.).",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'Three identifiers are required when verifying identity.'" // [cite: 312]
-  },
-  {
-    section: "Call Handling & HIPAA",
-    q: "If a caller refuses HIPAA verification, what must you do?",
-    options: ["Guess who they are", "Provide general info only", "End the call politely", "Ask for their supervisor"],
-    correctIndex: 2,
-    explanation: "You cannot proceed without verification.",
-    term: "HIPAA",
-    [cite_start]playbookLang: "Per playbook: 'Since we are unable to verify your identity, I must end this call.'" // [cite: 24]
+    explanation: "These allow calls to come through visible.",
+    term: "NICE/MAX",
+    [cite_start]playbookLang: "Per playbook: 'MAX settings must allow pop-ups and A/V notifications.' [cite: 191]"
   },
 
-  // =================================================================
-  // SECTION 2: REJECT CODES & OVERRIDES
-  // =================================================================
+  // SECTION 6: MAIL ORDER PROVIDERS
   {
-    section: "Reject Codes & Overrides",
-    q: "What does Reject Code R6 (Product/Service Not Appropriate for this Location) usually indicate?",
-    options: ["Member is not eligible", "Mandatory Mail Order benefit", "Drug is not FDA approved", "Pharmacy is closed"],
+    section: "6. Mail Order Providers",
+    q: "Who is Rightway's primary mail order provider?",
+    options: ["CVS", "Walgreens Mail Service", "Amazon", "Express Scripts"],
     correctIndex: 1,
-    explanation: "This occurs when a plan requires maintenance meds to be filled via mail order.",
-    term: "R6",
-    [cite_start]playbookLang: "Per playbook: 'This rejection will occur for any plans with a mandatory mail order benefit.'" // [cite: 489]
+    explanation: "Walgreens is the primary partner.",
+    term: "Walgreens Mail Service",
+    [cite_start]playbookLang: "Per playbook: 'Walgreens Mail Service = primary mail order.' [cite: 201]"
   },
   {
-    section: "Reject Codes & Overrides",
-    q: "For Reject 7X (Day Supply Exceeds) on an 'Opioid Naive' patient, what is the limit?",
-    options: ["30 days", "14 days", "7 days", "90 days"],
-    correctIndex: 2,
-    explanation: "New opioid users are often limited to a 7-day supply for safety.",
-    term: "Opioid Naive",
-    [cite_start]playbookLang: "Per playbook: '7 Day supply Max for Opioid Naive.'" // [cite: 508]
-  },
-  {
-    section: "Reject Codes & Overrides",
-    q: "How often can we grant a 'Lost/Stolen' override for a medication?",
-    options: ["Every month", "Once per year per medication", "Never", "As often as requested"],
+    section: "6. Mail Order Providers",
+    q: "What does MCCP stand for?",
+    options: ["Mail Center Care Plan", "Mark Cuban Cost Plus", "Medical Care Cost Plan", "Member Care Center"],
     correctIndex: 1,
-    explanation: "This is a strict frequency limit to prevent abuse.",
-    term: "79",
-    [cite_start]playbookLang: "Per playbook: 'We only permit one override per year per medication (1x/year/drug).'" // [cite: 615]
-  },
-  {
-    section: "Reject Codes & Overrides",
-    q: "Reject 70 (Drug Not Covered) usually requires what action?",
-    options: ["A medical necessity override (PA)", "Changing the pharmacy", "Paying cash", "Calling the police"],
-    correctIndex: 0,
-    explanation: "The drug is not on the formulary, so a clinical review is needed.",
-    term: "70",
-    [cite_start]playbookLang: "Per playbook: 'Reason Code: Medical Necessity is Established - Should be used if the request was approved.'" // [cite: 515]
-  },
-  {
-    section: "Reject Codes & Overrides",
-    q: "Which reject code appears if a Prior Authorization is required?",
-    options: ["70", "75", "76", "79"],
-    correctIndex: 1,
-    explanation: "75 is the standard code for PA required.",
-    term: "75",
-    [cite_start]playbookLang: "Per playbook: 'Prior Authorization (75)... Research the formulary status.'" // [cite: 519]
-  },
-  {
-    section: "Reject Codes & Overrides",
-    q: "If a pharmacy gets a 'Host Processing Issue (99)' reject, what do you do?",
-    options: ["Tell them to try later", "Notify a supervisor immediately", "Override it", "Ignore it"],
-    correctIndex: 1,
-    explanation: "This indicates a system-level failure.",
-    term: "Escalation",
-    [cite_start]playbookLang: "Per playbook: 'Notify a supervisor immediately.'" // [cite: 123]
-  },
-  {
-    section: "Reject Codes & Overrides",
-    q: "Reject 88 (DUR) related to 'High Dose' (HD) requires what?",
-    options: ["Agent override", "Pharmacist review", "Member approval", "Doctor note"],
-    correctIndex: 1,
-    explanation: "Agents cannot override safety alerts like High Dose.",
-    term: "DUR",
-    [cite_start]playbookLang: "Per playbook: 'A pharmacist in the RX-Tickets channel must review this if a pharmacy requests an override.'" // [cite: 569]
-  },
-  {
-    section: "Reject Codes & Overrides",
-    q: "What is required to bypass a 'Step Therapy (608)' reject?",
-    options: ["Paying more", "Clinical review/PA", "Waiting 30 days", "Using a coupon"],
-    correctIndex: 1,
-    explanation: "The member must fail a preferred drug first, or get a PA.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'Advise that the drug requires a clinical review.'" // [cite: 541]
-  },
-  {
-    section: "Reject Codes & Overrides",
-    q: "For a 'Missing/Invalid Quantity Prescribed (ET)' reject on a C-II narcotic, what is missing?",
-    options: ["The doctor's signature", "NCPDP field 460-ET", "The patient's address", "The diagnosis code"],
-    correctIndex: 1,
-    explanation: "Pharmacies must submit the quantity prescribed in this specific field for C-IIs.",
-    term: "DUR",
-    [cite_start]playbookLang: "Per playbook: 'They must submit the quantity prescribed in NCPDP field 460-ET.'" // [cite: 546]
-  },
-  {
-    section: "Reject Codes & Overrides",
-    q: "If a claim rejects for 'Cardholder Not Found (52)', what should you check first?",
-    options: ["If the pharmacy has the correct Cardholder ID and DOB", "If the member paid their bill", "If the pharmacy is contracted", "If the drug is covered"],
-    correctIndex: 0,
-    explanation: "Demographic mismatches are the most common cause.",
-    term: "Eligibility",
-    [cite_start]playbookLang: "Per playbook: 'Verify that the Cardholder ID and date of birth are correct and matching.'" // [cite: 479]
-  },
-
-  // =================================================================
-  // SECTION 3: CLINICAL REVIEW (UM) & MHK
-  // =================================================================
-  {
-    section: "Clinical Review & MHK",
-    q: "What is the standard Turn-Around-Time (TAT) for a Commercial Initial Request?",
-    options: ["24 hours", "48 hours", "72 hours", "7 days"],
-    correctIndex: 2,
-    explanation: "Standard requests allow 72 hours for review.",
-    term: "TAT",
-    [cite_start]playbookLang: "Per playbook: 'Initial Request Standard Commercial: 72 hours.'" // [cite: 680]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "What is the TAT for an Expedited Initial Request?",
-    options: ["24 hours", "72 hours", "15 days", "Immediate"],
-    correctIndex: 0,
-    explanation: "Expedited requests are for urgent health threats and are reviewed faster.",
-    term: "TAT",
-    [cite_start]playbookLang: "Per playbook: 'Initial Request Expedited Commercial: 24 hours.'" // [cite: 680]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "What dummy NDC do you use to start a Compound PA in MHK?",
-    options: ["00000000000", "12345678910", "99999999999", "88888888888"],
-    correctIndex: 2,
-    explanation: "Compounds don't have a single NDC, so this placeholder is used.",
-    term: "Compound",
-    [cite_start]playbookLang: "Per playbook: 'Enter nine 9's (99999999999) into the NDC.'" // [cite: 561]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "If a member's profile is red or 'Active/Null' in MHK, what must you do?",
-    options: ["Create the case anyway", "Update the member profile (Activate)", "Tell the member to call back", "Use a paper form"],
-    correctIndex: 1,
-    explanation: "You must manually update the profile to link the plan/group info before a case can be built.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'Right-click next to the member name... and click Update Member.'" // [cite: 721]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "What is the turnaround time for a Direct Member Reimbursement (DMR) decision?",
-    options: ["24 hours", "7 days", "21 business days", "6 months"],
-    correctIndex: 2,
-    explanation: "DMRs take longer than standard PAs because they involve financial review.",
-    term: "DMR",
-    [cite_start]playbookLang: "Per playbook: 'Rightway will review the request and provide a decision within 21 business days.'" // [cite: 770]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "Can we accept paper claims from pharmacies?",
-    options: ["Yes, always", "No, claims must be electronic", "Only for compounds", "Only for opioids"],
-    correctIndex: 1,
-    explanation: "Pharmacies must bill electronically through the BIN.",
-    term: "DMR",
-    [cite_start]playbookLang: "Per playbook: 'We do not accept paper claims, pharmacies must submit ALL claims electronically.'" // [cite: 794]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "How soon can a new PA case be initiated if an existing one is expiring?",
-    options: ["Only after it expires", "Within 90 days of expiration", "Within 30 days of expiration", "Any time"],
-    correctIndex: 1,
-    explanation: "This prevents gaps in therapy.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'A new case can be initiated within 90 days of the previous case expiring.'" // [cite: 683]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "What info can we give Cover My Meds employees over the phone?",
-    options: ["Anything they ask", "Only PA status for up to 5 members", "Full clinical history", "Member address and SSN"],
-    correctIndex: 1,
-    explanation: "We are limited in what we share with CMM support.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'If Cover My Meds call: We can provide PA status only for up to 5 members.'" // [cite: 706]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "If a provider wants to initiate a PA over the phone, what tool do we use?",
-    options: ["Tredium", "MHK", "Salesforce", "Notepad"],
-    correctIndex: 1,
-    explanation: "MHK is the intake tool for all clinical reviews.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'Create a case in MHK by following the create a case by phone directions.'" // [cite: 689]
-  },
-  {
-    section: "Clinical Review & MHK",
-    q: "If a PA was denied recently, when should we open a 'new' case vs re-opening?",
-    options: ["Always open a new case", "Re-open if denied within last 60 days", "Never re-open cases", "Wait 1 year"],
-    correctIndex: 1,
-    explanation: "If it's recent (60 days), we likely need to append info to the old case rather than start fresh.",
-    term: "MHK",
-    [cite_start]playbookLang: "Per playbook: 'If a member has a prior auth case that was denied in the last 60 days... request that the previously denied case be re-opened.'" // [cite: 708]
-  },
-
-  // =================================================================
-  // SECTION 4: PHARMACY PROGRAMS (Mail Order/Specialty)
-  // =================================================================
-  {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "Which mail order pharmacy carries both Brand and Generic medications?",
-    options: ["Mark Cuban Cost Plus", "Walgreens Mail Service", "Amazon Pharmacy", "CVS Caremark"],
-    correctIndex: 1,
-    explanation: "Walgreens is the full-service partner; Cost Plus is generic/limited only.",
-    term: "Mail Order",
-    [cite_start]playbookLang: "Per playbook: 'Walgreens Mail Service can ship brand and generic medication.'" // [cite: 372]
-  },
-  {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "What indicator in the Client Matrix shows a drug is available at Mark Cuban Cost Plus?",
-    options: ["X", "M", "C", "Y"],
-    correctIndex: 2,
-    explanation: "The 'C' stands for Cost Plus.",
+    explanation: "Rightway partners with Mark Cuban Cost Plus Drugs.",
     term: "MCCP",
-    [cite_start]playbookLang: "Per playbook: 'Any known medications on the searchable formulary will be listed with the 'C'.'" // [cite: 384]
+    [cite_start]playbookLang: "Per playbook: 'MCCP (Mark Cuban Cost Plus Drugs).' [cite: 378]"
   },
   {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "Can members access the Rightway App from any country?",
-    options: ["Yes, it is global", "No, only US, Canada, Mexico, Saudi Arabia, and territories", "Only in the US", "Only in Europe"],
+    section: "6. Mail Order Providers",
+    q: "What type of drugs does MCCP offer?",
+    options: ["Brand names", "Generics only", "Specialty only", "Compounds"],
     correctIndex: 1,
-    explanation: "Geographic access is restricted.",
-    term: "Eligibility",
-    [cite_start]playbookLang: "Per playbook: 'Note: Members can only access the app from the United States, Puerto Rico...'" // [cite: 364]
+    explanation: "MCCP inventory is limited to generics.",
+    term: "MCCP",
+    [cite_start]playbookLang: "Per playbook: 'MCCP = generics only.' [cite: 203]"
   },
   {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "What is the limit for covered OTC Covid tests per month?",
-    options: ["1 per month", "6-8 per month", "Unlimited", "None"],
-    correctIndex: 1,
-    explanation: "The standard coverage is 6 to 8 tests per eligible member/month.",
-    term: "Eligibility",
-    [cite_start]playbookLang: "Per playbook: 'Rightway will cover up to six to eight (6-8) FDA approved over-the-counter (OTC)... tests.'" // [cite: 426]
+    section: "6. Mail Order Providers",
+    q: "Which provider handles Specialty Pharmacy?",
+    options: ["Walgreens Specialty", "MCCP", "Target", "Walmart"],
+    correctIndex: 0,
+    explanation: "Walgreens Specialty is the designated specialty partner.",
+    term: "Walgreens Mail Service",
+    [cite_start]playbookLang: "Per playbook: 'Walgreens Specialty = specialty pharmacy.' [cite: 202]"
   },
   {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "If a pharmacy wants to host a Flu Clinic for >5 members, what must they do?",
-    options: ["Call for each one", "Fax the request", "Email the CEO", "Submit paper claims"],
+    section: "6. Mail Order Providers",
+    q: "Does Walgreens accept Medicaid plans?",
+    options: ["Yes, all of them", "Yes, limited plans", "No, never", "Only in Texas"],
     correctIndex: 1,
-    explanation: "Bulk processing info is handled via fax to keep phone lines open.",
-    term: "Escalation",
-    [cite_start]playbookLang: "Per playbook: 'Provide them with our fax number... and have them send the request via fax.'" // [cite: 448]
+    explanation: "Coverage is limited for Medicaid.",
+    term: "Walgreens Mail Service",
+    [cite_start]playbookLang: "Per playbook: 'Walgreens accepts limited Medicaid plans.' [cite: 206]"
+  },
+
+  // SECTION 7: COMMON REJECT CODES
+  {
+    section: "7. Common Reject Codes",
+    q: "What does Reject Code 75 mean?",
+    options: ["Drug not covered", "Refill too soon", "PA required", "Quantity limit"],
+    correctIndex: 2,
+    explanation: "75 = Prior Authorization.",
+    term: "75",
+    [cite_start]playbookLang: "Per playbook: '75 = PA required.' [cite: 216]"
   },
   {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "What email should a pharmacy use if they are 'Not Contracted'?",
-    options: ["help@rightway.com", "pharmacynetwork@rightwayhealthcare.com", "claims@rightway.com", "None, they can't join"],
-    correctIndex: 1,
-    explanation: "The Pharmacy Network team handles contracting.",
-    term: "Escalation",
-    [cite_start]playbookLang: "Per playbook: 'Provide the pharmacy with the following email: pharmacynetwork@rightwayhealthcare.com.'" // [cite: 474]
+    section: "7. Common Reject Codes",
+    q: "What does Reject Code 70 mean?",
+    options: ["Drug not covered", "Plan exclusion", "Refill too soon", "PA required"],
+    correctIndex: 0,
+    explanation: "70 = Drug not covered (Formulary).",
+    term: "70",
+    [cite_start]playbookLang: "Per playbook: '70 = Drug not covered.' [cite: 218]"
   },
   {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "How can you tell if a drug is a 'Maintenance Drug'?",
-    options: ["Guess", "Check the Drug Blade in Tredium", "Ask the member", "Look at the pill color"],
+    section: "7. Common Reject Codes",
+    q: "What does Reject Code 79 mean?",
+    options: ["Quantity limit", "Refill too soon", "Plan exclusion", "PA required"],
     correctIndex: 1,
-    explanation: "Tredium has a specific field for this status.",
-    term: "Maintenance Drug",
-    [cite_start]playbookLang: "Per playbook: 'In the Drug blade, there is a Maintenance Drug field.'" // [cite: 412]
+    explanation: "79 = Refill too soon.",
+    term: "79",
+    [cite_start]playbookLang: "Per playbook: '79 = Refill too soon.' [cite: 219]"
   },
   {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "What does the 'M' in MONY code stand for?",
-    options: ["Money", "Multi-source Brand (Single-Source co-licensed)", "Multi-source Generic", "Manufacturer"],
-    correctIndex: 1,
-    explanation: "MONY codes classify brand vs generic status.",
-    term: "Maintenance Drug",
-    [cite_start]playbookLang: "Per playbook: 'M - a Single-Source, co-licensed product.'" // [cite: 418]
+    section: "7. Common Reject Codes",
+    q: "What does Reject Code 9G mean?",
+    options: ["Quantity limit", "Refill too soon", "Drug not covered", "Plan exclusion"],
+    correctIndex: 0,
+    explanation: "9G = Quantity Limit.",
+    term: "9G",
+    [cite_start]playbookLang: "Per playbook: '9G = Quantity limit.' [cite: 220]"
   },
   {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "Can Walgreens Customer Care run 'Trial Claims'?",
-    options: ["Yes", "No, they must submit actual claims", "Only for VIPs", "Only on weekends"],
+    section: "7. Common Reject Codes",
+    q: "What does Reject Code 76 mean?",
+    options: ["Plan exclusion", "PA required", "Refill too soon", "Quantity limit"],
+    correctIndex: 0,
+    explanation: "76 = Plan exclusion.",
+    term: "70",
+    [cite_start]playbookLang: "Per playbook: '76 = Plan exclusion.' [cite: 217]"
+  },
+
+  // SECTION 8: CLINICAL REVIEW & MHK
+  {
+    section: "8. Clinical Review & MHK",
+    q: "What system is used for PA cases?",
+    options: ["Advocate", "MHK", "Slack", "Tredium"],
     correctIndex: 1,
-    explanation: "Their system limitations prevent trial adjudications.",
-    term: "Mail Order",
-    [cite_start]playbookLang: "Per playbook: 'Walgreens pharmacy system... does not allow them to run trial claims.'" // [cite: 379]
+    explanation: "MHK is the clinical review system.",
+    term: "MHK",
+    [cite_start]playbookLang: "Per playbook: 'MHK used for PA cases...' [cite: 230]"
   },
   {
-    section: "Pharmacy Programs (Mail/Specialty)",
-    q: "Who handles the 'Care Complete Diabetes Program' for Novelis/Aveanna?",
-    options: ["Any agent", "RxNav Pharmacists", "Walgreens", "The member"],
+    section: "8. Clinical Review & MHK",
+    q: "What does TAT stand for?",
+    options: ["Turn-Around-Time", "Take-A-Turn", "Technical-Action-Team", "Total-Amount-Time"],
+    correctIndex: 0,
+    explanation: "This is the deadline for case reviews.",
+    term: "TAT",
+    [cite_start]playbookLang: "Per playbook: 'Clinical review turnaround times (TAT)...' [cite: 230]"
+  },
+  {
+    section: "8. Clinical Review & MHK",
+    q: "Can a PA case be created via phone?",
+    options: ["No, fax only", "Yes", "Only by supervisors", "Only on weekends"],
     correctIndex: 1,
-    explanation: "This is a specialized clinical program managed by pharmacists.",
-    term: "Specialty",
-    [cite_start]playbookLang: "Per playbook: 'Program is specific to Novelis & Aveanna... should be directed to the RxNav pharmacists.'" // [cite: 456]
+    explanation: "Agents can intake cases by phone.",
+    term: "MHK",
+    [cite_start]playbookLang: "Per playbook: 'Cases can be created via phone.' [cite: 232]"
+  },
+  {
+    section: "8. Clinical Review & MHK",
+    q: "Which specific client has a 'Clinical Line' procedure?",
+    options: ["Walgreens", "Collective Health", "MCCP", "Rightway"],
+    correctIndex: 1,
+    explanation: "Collective Health has specific routing procedures.",
+    term: "MHK",
+    [cite_start]playbookLang: "Per playbook: 'Collective Health Clinical Line procedures apply.' [cite: 233]"
+  },
+  {
+    section: "8. Clinical Review & MHK",
+    q: "If a PA isn't applying correctly, what should you do?",
+    options: ["Ignore it", "Troubleshoot in MHK / Escalate", "Tell member it's denied", "Create a new case"],
+    correctIndex: 1,
+    explanation: "Check the system first, then escalate to clinical navigation.",
+    term: "MHK",
+    [cite_start]playbookLang: "Per playbook: 'Let's check if the PA is applying correctly... If not, I'll escalate.' [cite: 330]"
+  },
+
+  // SECTION 9: DOWNTIME PROCEDURES
+  {
+    section: "9. Downtime Procedures",
+    q: "What should you use during a system outage?",
+    options: ["Go home", "Paper claims", "Email claims", "Nothing"],
+    correctIndex: 1,
+    explanation: "Paper claims ensure coverage continues during outages.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Use paper claims during downtime.' [cite: 242]"
+  },
+  {
+    section: "9. Downtime Procedures",
+    q: "What system is used for reversals?",
+    options: ["MHK", "Tredium", "Advocate", "Slack"],
+    correctIndex: 1,
+    explanation: "Tredium is the adjudication platform for reversals.",
+    term: "Tredium",
+    [cite_start]playbookLang: "Per playbook: 'Process reversals in Tredium.' [cite: 242]"
+  },
+  {
+    section: "9. Downtime Procedures",
+    q: "How do you handle urgent overrides during downtime?",
+    options: ["Call the CEO", "Use Slack templates", "Wait for system to come back", "Post-it notes"],
+    correctIndex: 1,
+    explanation: "Slack allows the team to manually process urgent needs.",
+    term: "Slack",
+    [cite_start]playbookLang: "Per playbook: 'Urgent overrides via Slack templates.' [cite: 243]"
+  },
+  {
+    section: "9. Downtime Procedures",
+    q: "Where can you find guidance on overrides?",
+    options: ["Google", "Rx Tickets FAQ", "Twitter", "Ask a neighbor"],
+    correctIndex: 1,
+    explanation: "The FAQ document is the standard reference.",
+    term: "Advocate",
+    [cite_start]playbookLang: "Per playbook: 'Always follow Rx Tickets FAQ for overrides.' [cite: 245]"
+  },
+  {
+    section: "9. Downtime Procedures",
+    q: "What template should be used for specialty requests?",
+    options: ["General template", "Specialty template", "Urgent template", "Email"],
+    correctIndex: 1,
+    explanation: "Specialty has unique requirements.",
+    term: "Slack",
+    [cite_start]playbookLang: "Per playbook: 'Specialty requests use specialty template.' [cite: 246]"
   }
 ];
 
-// --- 2. APP STATE ---
+// --- 2. APP LOGIC ---
 let currentSectionData = [];
 let currentIndex = 0;
 let score = 0;
 
-// --- 3. INITIALIZATION ---
+// Initialize
 const sectionSelect = document.getElementById("sectionSelect");
-// Get unique sections
+// Extract unique sections
 const uniqueSections = [...new Set(QUESTIONS.map(item => item.section))];
+
+// Populate Dropdown
 uniqueSections.forEach(section => {
   const opt = document.createElement("option");
   opt.value = section;
@@ -416,8 +574,7 @@ uniqueSections.forEach(section => {
   sectionSelect.appendChild(opt);
 });
 
-// --- 4. FUNCTIONS ---
-
+// START
 function startQuiz() {
   const selectedSection = sectionSelect.value;
   currentSectionData = QUESTIONS.filter(q => q.section === selectedSection);
@@ -431,8 +588,8 @@ function startQuiz() {
   showQuestion();
 }
 
+// SHOW QUESTION
 function showQuestion() {
-  // Reset UI
   document.getElementById("submitBtn").classList.remove("hidden");
   document.getElementById("nextBtn").classList.add("hidden");
   const container = document.getElementById("quizContainer");
@@ -445,13 +602,13 @@ function showQuestion() {
 
   const qData = currentSectionData[currentIndex];
   
-  // Render Title
+  // Title
   const title = document.createElement("div");
   title.className = "question-title";
   title.textContent = `${currentIndex + 1}. ${qData.q}`;
   container.appendChild(title);
   
-  // Render Options
+  // Options
   const optionsDiv = document.createElement("div");
   optionsDiv.className = "options";
   qData.options.forEach((opt, idx) => {
@@ -461,12 +618,13 @@ function showQuestion() {
   });
   container.appendChild(optionsDiv);
   
-  // Placeholder for feedback
+  // Feedback Area
   const feedbackDiv = document.createElement("div");
   feedbackDiv.id = "feedbackArea";
   container.appendChild(feedbackDiv);
 }
 
+// SUBMIT
 function submitAnswer() {
   const qData = currentSectionData[currentIndex];
   const selectedEl = document.querySelector('input[name="questionOption"]:checked');
@@ -480,21 +638,18 @@ function submitAnswer() {
   const isCorrect = (selectedIndex === qData.correctIndex);
   
   if (isCorrect) score++;
-
-  // --- 5. RESTRUCTURED FEEDBACK GENERATION ---
   
   const feedbackArea = document.getElementById("feedbackArea");
   const definitionText = DEFINITIONS[qData.term] || "Definition not available.";
-  const correctActionText = qData.options[qData.correctIndex]; // The text of the correct answer
+  const correctActionText = qData.options[qData.correctIndex];
   
-  // HTML Template for the 4 key items
+  // Render Feedback
   feedbackArea.innerHTML = `
     <div class="feedback-box ${isCorrect ? 'correct' : 'incorrect'}">
-      
       <div class="feedback-item">
         <span class="feedback-label">✅ Correct/Incorrect status:</span>
-        ${isCorrect ? '<strong>Correct!</strong>' : '<strong>Incorrect.</strong>'} 
-        (Correct Action: ${correctActionText})
+        ${isCorrect ? '<strong style="color:green">Correct!</strong>' : '<strong style="color:red">Incorrect.</strong>'} 
+        <br>Correct Action: <strong>${correctActionText}</strong>
       </div>
 
       <div class="feedback-item">
@@ -503,7 +658,7 @@ function submitAnswer() {
       </div>
 
       <div class="feedback-item">
-        <span class="feedback-label">📖 Definition of the key term:</span>
+        <span class="feedback-label">📖 Definition:</span>
         <strong>${qData.term}:</strong> ${definitionText}
       </div>
 
@@ -511,24 +666,23 @@ function submitAnswer() {
         <span class="feedback-label">🗣️ Playbook Language:</span>
         <em>"${qData.playbookLang}"</em>
       </div>
-
     </div>
   `;
   
-  // Toggle buttons
+  // UI Updates
   document.getElementById("submitBtn").classList.add("hidden");
   document.getElementById("nextBtn").classList.remove("hidden");
-  
-  // Disable radio buttons so they can't change answer
   const radios = document.querySelectorAll('input[name="questionOption"]');
   radios.forEach(r => r.disabled = true);
 }
 
+// NEXT
 function nextQuestion() {
   currentIndex++;
   showQuestion();
 }
 
+// FINISH
 function finishQuiz() {
   const container = document.getElementById("quizContainer");
   container.innerHTML = "<h2>Quiz Complete!</h2>";
@@ -539,11 +693,14 @@ function finishQuiz() {
   finalScoreDiv.classList.remove("hidden");
   finalScoreDiv.textContent = `Final Score: ${score} / ${currentSectionData.length}`;
   
-  // Add a restart button
   const restartBtn = document.createElement("button");
   restartBtn.className = "primary";
-  restartBtn.textContent = "Take Another Quiz";
+  restartBtn.textContent = "Return to Menu";
+  restartBtn.style.marginTop = "20px";
   restartBtn.onclick = () => { location.reload(); };
   container.appendChild(restartBtn);
 }
 </script>
+
+</body>
+</html>
