@@ -1,137 +1,68 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Contact Center Playbook Quiz</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 32px; background: #f6f7fb; color: #222; }
-    .container { max-width: 900px; margin: 0 auto; }
-    h1 { font-size: 22px; margin-bottom: 16px; }
-    .card { background: #fff; border-radius: 12px; box-shadow: 0 6px 22px rgba(0,0,0,0.06); padding: 20px; margin-bottom: 16px; }
-    select, button { padding: 10px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; }
-    button.primary { background: #0a66c2; color: #fff; border: none; }
-    button.primary:hover { background: #084f98; }
-    .question-block { border-top: 1px solid #eee; padding-top: 16px; margin-top: 16px; }
-    .question-title { font-weight: 600; margin-bottom: 10px; }
-    .options label { display: block; margin: 6px 0; cursor: pointer; }
-    .feedback { margin-top: 8px; font-size: 13px; font-style: italic; }
-    .feedback.correct { color: green; }
-    .feedback.incorrect { color: red; }
-    .result { margin-top: 16px; font-weight: 600; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Contact Center Playbook Quiz</h1>
-    <div class="card">
-      <label for="sectionSelect">Choose a section:</label>
-      <select id="sectionSelect"></select>
-      <button class="primary" onclick="loadSection()">Load Section</button>
-    </div>
-    <div class="card">
-      <div id="quiz"></div>
-      <button class="primary" onclick="submitQuiz()">Submit Answers</button>
-      <div id="result" class="result"></div>
-    </div>
-  </div>
+<script>
+  const DEFINITIONS = {
+    "R15": "Reject code for missing prior authorization.",
+    "R05": "Reject code for duplicate submission.",
+    "Eligibility": "Verification that the caller is an active member with valid coverage.",
+    "MHK": "System used to track Clinical Review workflows and documentation.",
+    "Escalation": "Routing a call or case to a higher authority (supervisor, pharmacist) per protocol.",
+    "Compliance": "Following rules, policies, and regulations to protect members and the organization.",
+    "Documentation": "Recording actions, outcomes, and rationale in a structured, audit-ready format.",
+    "Scripts": "Standardized phrasing used to guide calls and ensure consistency.",
+    "Non-member": "Caller who is not the member; requires limited disclosure and documentation."
+  };
 
-  <script>
-    // Definitions dictionary
-    const DEFINITIONS = {
-      "R15": "Reject code for missing prior authorization.",
-      "R05": "Reject code for duplicate submission.",
-      "R10": "Reject code for incomplete information.",
-      "R20": "Reject code for eligibility not verified.",
-      "R25": "Reject code for documentation missing.",
-      "R30": "Reject code for wrong provider listed.",
-      "Eligibility": "Verification that the caller is an active member with valid coverage.",
-      "MHK": "System used to track Clinical Review workflows and documentation.",
-      "Escalation": "Routing a call or case to a higher authority (supervisor, pharmacist) per protocol.",
-      "Audit Readiness": "Ensuring documentation and workflows are complete, chronological, and compliant for review.",
-      "Compliance": "Following rules, policies, and regulations to protect members and the organization.",
-      "Documentation": "Recording actions, outcomes, and rationale in a structured, audit-ready format.",
-      "Scripts": "Standardized phrasing used to guide calls and ensure consistency.",
-      "Non-member": "Caller who is not the member; requires limited disclosure and documentation."
-    };
+  const QUESTIONS = [
+    {
+      section:"member",
+      q:"What is the first step when handling a Clinical Review call?",
+      options:["Verify member identity","Check escalation protocol","Document reject code","Transfer to supervisor"],
+      a:0,
+      expl:"Always verify member identity first to ensure compliance.",
+      term:"Eligibility",
+      playbookLang:"Per playbook: 'Begin every call by verifying the member’s identity using two approved identifiers.'"
+    },
+    {
+      section:"clinical",
+      q:"Which system is used to track Clinical Review workflows?",
+      options:["Email","MHK","Spreadsheets","Chat logs"],
+      a:1,
+      expl:"MHK is the official tool to track review status.",
+      term:"MHK",
+      playbookLang:"Per playbook: 'All Clinical Review workflows must be documented and tracked in the MHK system.'"
+    },
+    {
+      section:"rejects",
+      q:"Which reject code applies when prior authorization is missing?",
+      options:["R01","R15","R22","R99"],
+      a:1,
+      expl:"R15 is used when prior authorization is missing.",
+      term:"R15",
+      playbookLang:"Per playbook: 'Use reject code R15 when prior authorization is not on file.'"
+    }
+    // ... add more questions with playbookLang
+  ];
 
-    // Sections
-    const SECTIONS = [
-      { id: "Member Verification & Eligibility", tag: "member" },
-      { id: "Clinical Review Workflow", tag: "clinical" },
-      { id: "Reject Codes", tag: "rejects" },
-      { id: "Documentation Standards", tag: "docs" },
-      { id: "Escalation Protocols", tag: "escalation" },
-      { id: "Compliance & Audit Readiness", tag: "compliance" },
-      { id: "System Navigation (MHK & Portals)", tag: "systems" },
-      { id: "Scripts & Call Handling", tag: "scripts" },
-      { id: "Non-member & Third-party Calls", tag: "nonmember" }
-    ];
-
-    // Questions (sample set per section, expand as needed)
-    const QUESTIONS = [
-      { section:"member", q:"What is the first step when handling a Clinical Review call?", options:["Verify member identity","Check escalation protocol","Document reject code","Transfer to supervisor"], a:0, expl:"Always verify member identity first to ensure compliance.", term:"Eligibility" },
-      { section:"clinical", q:"Which system is used to track Clinical Review workflows?", options:["Email","MHK","Spreadsheets","Chat logs"], a:1, expl:"MHK is the official tool to track review status.", term:"MHK" },
-      { section:"rejects", q:"Which reject code applies when prior authorization is missing?", options:["R01","R15","R22","R99"], a:1, expl:"R15 is used when prior authorization is missing.", term:"R15" },
-      { section:"docs", q:"What must be documented after applying a reject code?", options:["Supervisor initials","Reason and action taken","Caller’s tone","Nothing"], a:1, expl:"Reason and action taken must be documented.", term:"Documentation" },
-      { section:"escalation", q:"When should you escalate to a supervisor?", options:["Caller disputes a code","Any routine call","System is fast","Skip documentation"], a:0, expl:"Disputes and explicit requests require supervisor escalation.", term:"Escalation" },
-      { section:"compliance", q:"Minimum necessary principle means:", options:["Share only what’s needed","Share everything","Avoid documentation","Skip verification"], a:0, expl:"Disclose the least information necessary to accomplish the task.", term:"Compliance" },
-      { section:"systems", q:"Primary system for clinical tracking:", options:["MHK","Chat","Email","Spreadsheet"], a:0, expl:"MHK is the system of record for clinical workflows.", term:"MHK" },
-      { section:"scripts", q:"Before ending the call you should:", options:["Confirm resolution","End abruptly","Skip notes","Ask unrelated questions"], a:0, expl:"Always close with confirmation and a brief summary.", term:"Scripts" },
-      { section:"nonmember", q:"When a third party calls about a member:", options:["Confirm authorization or provide minimum necessary info","Share freely","Refuse to document","Guess identity"], a:0, expl:"Confirm authorized status; otherwise limit sharing and document.", term:"Non-member" }
-    ];
-
-    // Build section dropdown
-    const sectionSelect = document.getElementById("sectionSelect");
-    SECTIONS.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.tag;
-      opt.textContent = s.id;
-      sectionSelect.appendChild(opt);
+  function submitAnswer() {
+    let score = 0;
+    QUESTIONS.forEach((q,i) => {
+      const selected = document.querySelector(`input[name="q${i}"]:checked`);
+      const fb = document.getElementById(`fb${i}`);
+      if (!fb) return;
+      fb.style.display = "block";
+      const defText = q.term && DEFINITIONS[q.term] ? `Definition: ${DEFINITIONS[q.term]}` : "";
+      const langText = q.playbookLang ? `Playbook Language: ${q.playbookLang}` : "";
+      if (selected && parseInt(selected.value) === q.a) {
+        score++;
+        fb.className = "feedback correct";
+        fb.innerHTML = `✅ Correct — ${q.expl}<br>${defText}<br>${langText}`;
+      } else if (selected) {
+        fb.className = "feedback incorrect";
+        fb.innerHTML = `❌ Incorrect — ${q.expl}<br>${defText}<br>${langText}`;
+      } else {
+        fb.className = "feedback incorrect";
+        fb.innerHTML = `⚠️ No answer selected — ${q.expl}<br>${defText}<br>${langText}`;
+      }
     });
-
-    let currentQuestions = [];
-
-    function loadSection() {
-      const tag = sectionSelect.value;
-      currentQuestions = QUESTIONS.filter(q => q.section === tag);
-      const quizDiv = document.getElementById("quiz");
-      quizDiv.innerHTML = "";
-      currentQuestions.forEach((q,i) => {
-        const block = document.createElement("div");
-        block.className = "question-block";
-        block.innerHTML = `
-          <div class="question-title">${i+1}. ${q.q}</div>
-          <div class="options">
-            ${q.options.map((opt,j)=>`<label><input type="radio" name="q${i}" value="${j}"> ${opt}</label>`).join("")}
-          </div>
-          <div class="feedback" id="fb${i}" style="display:none;"></div>
-        `;
-        quizDiv.appendChild(block);
-      });
-      document.getElementById("result").textContent = "";
-    }
-
-    function submitQuiz() {
-      let score = 0;
-      currentQuestions.forEach((q,i) => {
-        const selected = document.querySelector(`input[name="q${i}"]:checked`);
-        const fb = document.getElementById(`fb${i}`);
-        fb.style.display = "block";
-        const defText = q.term && DEFINITIONS[q.term] ? `Definition: ${DEFINITIONS[q.term]}` : "";
-        if (selected && parseInt(selected.value) === q.a) {
-          score++;
-          fb.className = "feedback correct";
-          fb.innerHTML = `Correct — ${q.expl}<br>${defText}`;
-        } else if (selected) {
-          fb.className = "feedback incorrect";
-          fb.innerHTML = `Incorrect — ${q.expl}<br>${defText}`;
-        } else {
-          fb.className = "feedback incorrect";
-          fb.innerHTML = `No answer selected — ${q.expl}<br>${defText}`;
-        }
-      });
-      document.getElementById("result").textContent = `You scored ${score} out of ${currentQuestions.length}`;
-    }
-  </script>
-</body>
-</html>
+    document.getElementById("result").innerText = `You scored ${score} out of ${QUESTIONS.length}`;
+  }
+</script>
